@@ -269,20 +269,73 @@ double tcfd(std::vector<double>&sq,int sr,int r,double frac,double td) {
 	return zc;
 }
 
-double trap(std::vector<double> sq,std::vector<float> *strap,unsigned R,unsigned F) {
-	double max=0;
+double trap_simp(std::vector<double> sq,unsigned R,unsigned F,int &imax) {
+	double max=-1;
 	long double y,out=0;
-// 	if(strap!=nullptr) strap->resize(sq.size());
 	for(unsigned i=0;i<sq.size();i++) {
 		if(i>=2*R+F) y=sq[i]-sq[i-R]-sq[i-R-F]+sq[i-2*R-F];
 		else if(i>=R+F) y=sq[i]-sq[i-R]-sq[i-R-F];
 		else if(i>=R) y=sq[i]-sq[i-R];
 		else y=sq[i];
 		out+=y/((long double)R);
-		if(out>(long double)max) max=out;
-		if(strap!=nullptr) (*strap)[i]=(float)out;
+		
+		if(out>(long double)max) {max=out; imax=(int)i;}
 	}
 	return max;
+}
+
+double trap_save(std::vector<double> sq,std::vector<float> &strap,unsigned R,unsigned F,int &imax) {
+	double max=-1;
+	long double y,out=0;
+	for(unsigned i=0;i<sq.size();i++) {
+		if(i>=2*R+F) y=sq[i]-sq[i-R]-sq[i-R-F]+sq[i-2*R-F];
+		else if(i>=R+F) y=sq[i]-sq[i-R]-sq[i-R-F];
+		else if(i>=R) y=sq[i]-sq[i-R];
+		else y=sq[i];
+		out+=y/((long double)R);
+		
+		if(out>(long double)max) {max=out; imax=(int)i;}
+		strap[i]=(float)out;
+	}
+	return max;
+}
+
+double trap_pick_simp(std::vector<double> sq,unsigned R,unsigned F,int &imax) {
+	double max=-1,spick=-1;
+	long double y,out=0;
+	
+	if((imax<0)||(imax>=(int)(sq.size()))) return -1;
+	int pick=imax;
+	for(unsigned i=0;i<sq.size();i++) {
+		if(i>=2*R+F) y=sq[i]-sq[i-R]-sq[i-R-F]+sq[i-2*R-F];
+		else if(i>=R+F) y=sq[i]-sq[i-R]-sq[i-R-F];
+		else if(i>=R) y=sq[i]-sq[i-R];
+		else y=sq[i];
+		out+=y/((long double)R);
+		
+		if(pick==(int)i) spick=out;
+		if(out>(long double)max) {max=out; imax=(int)i;}
+	}
+	return spick;
+}
+
+double trap_pick_save(std::vector<double> sq,std::vector<float> &strap,unsigned R,unsigned F,int &imax) {
+	double max=-1,spick=-1;
+	long double y,out=0;
+	
+	int pick=imax;
+	for(unsigned i=0;i<sq.size();i++) {
+		if(i>=2*R+F) y=sq[i]-sq[i-R]-sq[i-R-F]+sq[i-2*R-F];
+		else if(i>=R+F) y=sq[i]-sq[i-R]-sq[i-R-F];
+		else if(i>=R) y=sq[i]-sq[i-R];
+		else y=sq[i];
+		out+=y/((long double)R);
+		
+		if(pick==(int)i) spick=out;
+		if(out>(long double)max) {max=out; imax=(int)i;}
+		strap[i]=(float)out;
+	}
+	return spick;
 }
 
 int ImaxParabolic(std::vector<int16_t> si,double &imax) {
@@ -317,7 +370,7 @@ int main(int argc,char *argv[]) {
 	printf("*******************************************\n");
 	printf("*   FAZIA tree builder from PB raw data   *\n");
 	printf("*            by Simone Valdre'            *\n");
-	printf("*           v1.03  (2019-12-16)           *\n");
+	printf("*           v1.02  (2019-12-05)           *\n");
 	printf("*******************************************\n");
 	printf("\n");
 	if(fin==NULL) {
@@ -335,9 +388,10 @@ int main(int argc,char *argv[]) {
 	float fBf[3]={1,1,1};
 	unsigned fRi[4]={200,200,200,70};
 	unsigned sRi[4]={200,500,200,200};
-	unsigned sFl[4]={100,250,100,1000};
 	unsigned sRf=200;
+	unsigned sFl[4]={100,250,100,1000};
 	unsigned sFf=50;
+	unsigned sPT[4]={0,0,0,0};
 	double arc_del=20,arc_frac=0.2,cfd_del=100;
 	bool fPZC=false,fWave=false,fTrap=false,fTime=false;
 	TRandom3 ran(0);
@@ -391,22 +445,27 @@ int main(int argc,char *argv[]) {
 		if((strcmp(riga.com,"sQH1S")==0)&&(riga.n>1)) {
 			sRi[0]=atoi(riga.arg[0]);
 			sFl[0]=atoi(riga.arg[1]);
+			if(riga.n>2) sPT[0]=atoi(riga.arg[2]);
 		}
 		if((strcmp(riga.com,"sQL1S")==0)&&(riga.n>1)) {
 			sRi[1]=atoi(riga.arg[0]);
 			sFl[1]=atoi(riga.arg[1]);
+			if(riga.n>2) sPT[1]=atoi(riga.arg[2]);
 		}
 		if((strcmp(riga.com,"sQ2S")==0)&&(riga.n>1)) {
 			sRi[2]=atoi(riga.arg[0]);
 			sFl[2]=atoi(riga.arg[1]);
+			if(riga.n>2) sPT[2]=atoi(riga.arg[2]);
 		}
 		if((strcmp(riga.com,"sQ3sS")==0)&&(riga.n>1)) {
 			sRi[3]=atoi(riga.arg[0]);
 			sFl[3]=atoi(riga.arg[1]);
+			if(riga.n>2) sPT[3]=atoi(riga.arg[2]);
 		}
 		if((strcmp(riga.com,"sQ3fS")==0)&&(riga.n>1)) {
 			sRf=atoi(riga.arg[0]);
 			sFf=atoi(riga.arg[1]);
+			//Picking time for fast has no sense at all
 		}
 		if((strcmp(riga.com,"arc")==0)&&(riga.n>1)) {
 			arc_del=atof(riga.arg[0]);
@@ -441,9 +500,9 @@ int main(int argc,char *argv[]) {
 	uint16_t Mtot,fTrigRB,fRateInfo,fBlk[MAXMTOT],fQua[MAXMTOT],fTel[MAXMTOT],fTrig[MAXMTOT];
 	unsigned fRun;
 	uint64_t fValTag;
-	int16_t fDeltaTag[MAXMTOT];
+	int16_t fDeltaTag[MAXMTOT],tMax[5][MAXMTOT];
 	float fTempRB,trgDead[1],tri[12];
-	float fE[4][MAXMTOT],fBL[3][MAXMTOT],sMax[7][MAXMTOT],sMaxPZC[7][MAXMTOT];
+	float fE[4][MAXMTOT],fBL[3][MAXMTOT],sMax[7][MAXMTOT];
 	float sBL[6][MAXMTOT],sSBL[6][MAXMTOT];
 	float sTARC[4][MAXMTOT],sT20[4][MAXMTOT],sT70[4][MAXMTOT];
 	unsigned iW[6][MAXMTOT];
@@ -511,14 +570,12 @@ int main(int argc,char *argv[]) {
 	tree->Branch("sQ3max",sMax[5],"sQ3max[Mtot]/F");
 	tree->Branch("sQ3fast",sMax[6],"sQ3fast[Mtot]/F");
 	
-	if(fPZC) {
-		//Off-line shaped energies (pole-zero compensated)
-		tree->Branch("sQH1maxPZC",sMaxPZC[0],"sQH1maxPZC[Mtot]/F");
-		tree->Branch("sQL1maxPZC",sMaxPZC[2],"sQL1maxPZC[Mtot]/F");
-		tree->Branch("sQ2maxPZC",sMaxPZC[3],"sQ2maxPZC[Mtot]/F");
-		tree->Branch("sQ3maxPZC",sMaxPZC[5],"sQ3maxPZC[Mtot]/F");
-		tree->Branch("sQ3fastPZC",sMaxPZC[6],"sQ3fastPZC[Mtot]/F");
-	}
+	//Time of trapezoidal shaper maximum
+	tree->Branch("tQH1max",tMax[0],"tQH1max[Mtot]/S");
+	tree->Branch("tQL1max",tMax[1],"tQL1max[Mtot]/S");
+	tree->Branch("tQ2max",tMax[2],"tQ2max[Mtot]/S");
+	tree->Branch("tQ3max",tMax[3],"tQ3max[Mtot]/S");
+	tree->Branch("tQ3fast",tMax[4],"tQ3fast[Mtot]/S");
 	
 	//Base line level
 	tree->Branch("sQH1bl",sBL[0],"sQH1bl[Mtot]/F");
@@ -582,11 +639,11 @@ int main(int argc,char *argv[]) {
 	}
 	if(fTrap) {
 		//Trapezoidal shaped signals
-		tree->Branch("tQH1",tW);
-		tree->Branch("tQL1",tW+1);
-		tree->Branch("tQ2",tW+2);
-		tree->Branch("tQ3slow",tW+3);
-		tree->Branch("tQ3fast",tW+4);
+		tree->Branch("trapQH1",tW);
+		tree->Branch("trapQL1",tW+1);
+		tree->Branch("trapQ2",tW+2);
+		tree->Branch("trapQ3slow",tW+3);
+		tree->Branch("trapQ3fast",tW+4);
 	}
 	
 	//Common variables
@@ -604,11 +661,12 @@ int main(int argc,char *argv[]) {
 		//private copies
 		EventStr pev;
 		ULong64_t pevent;
-		std::vector<float> psMax[7],psMaxPZC[7],psBL[6],psSBL[6],psTARC[4],psT20[4],psT70[4];
+		std::vector<float> psMax[7],psBL[6],psSBL[6],psTARC[4],psT20[4],psT70[4];
+		std::vector<int16_t> ptMax[5];
 // 		std::vector<uint16_t> pntrg[4];
 		std::vector<unsigned> poff[6];
 		std::vector< std::vector<float> > pTrap[5];
-		std::vector<double> sQ,sQPZC;
+		std::vector<double> sQ;
 		double prev,tmp,imax;
 		int tmi,re;
 		unsigned cnt,coff[6];
@@ -653,7 +711,6 @@ int main(int argc,char *argv[]) {
 			
 			for(int k=0;k<7;k++) {
 				psMax[k].clear();
-				psMaxPZC[k].clear();
 				if(k>=6) continue;
 				coff[k]=0;
 				psBL[k].clear();
@@ -663,6 +720,8 @@ int main(int argc,char *argv[]) {
 					for(unsigned i=0;i<pTrap[k].size();i++) pTrap[k][i].clear();
 					pTrap[k].resize(pev.Mtot);
 				}
+				if(k>=5) continue;
+				ptMax[k].clear();
 				if(k>=4) continue;
 // 				pntrg[k].clear();
 				psTARC[k].clear();
@@ -672,7 +731,6 @@ int main(int argc,char *argv[]) {
 			for(int ip=0;ip<(pev.Mtot);ip++) {
 				for(int k=0;k<7;k++) {
 					psMax[k].push_back(-1);
-					psMaxPZC[k].push_back(-1);
 					if(k>=6) continue;
 					psBL[k].push_back(-10000);
 					psSBL[k].push_back(-1);
@@ -684,6 +742,8 @@ int main(int argc,char *argv[]) {
 						pTrap[QIidx[k]][ip].resize((pev.wf)[k][ip].size());
 						if(k==5) pTrap[4][ip].resize((pev.wf)[k][ip].size());
 					}
+					if(k>=5) continue;
+					ptMax[k].push_back(-1);
 					if(k>=4) continue;
 // 					pntrg[k].push_back(0);
 					psTARC[k].push_back(-1);
@@ -766,49 +826,46 @@ int main(int argc,char *argv[]) {
 // 						}
 						//Baseline subtraction and pole zero correction
 						if(fPZC) {
-							sQPZC=sQ;
+							prev=sQ[0];
 							sQ[0]-=psBL[k][ip];
-							prev=sQPZC[0];
-							sQPZC[0]-=psBL[k][ip];
-							for(unsigned j=1;j<sQPZC.size();j++) {
-								tmp=(sQPZC[j]-prev)+pztau[k]*(prev-psBL[k][ip])+sQPZC[j-1];
-								prev=sQPZC[j];
-								sQPZC[j]=tmp;
-								sQ[j]-=psBL[k][ip];
+							for(unsigned j=1;j<sQ.size();j++) {
+								tmp=(sQ[j]-prev)+pztau[k]*(prev-psBL[k][ip])+sQ[j-1];
+								prev=sQ[j];
+								sQ[j]=tmp;
 							}
 						}
 						else {
-							for(unsigned j=0;j<sQPZC.size();j++) {
+							for(unsigned j=0;j<sQ.size();j++) {
 								sQ[j]-=psBL[k][ip];
 							}
-							sQPZC=sQ;
 						}
 						//Energy shaping
-						if(fTrap) {
-							if(fPZC) {
-								psMaxPZC[k][ip]=trap(sQPZC,&(pTrap[QIidx[k]][ip]),sRi[QIidx[k]],sFl[QIidx[k]]);
-								if(k==5) psMaxPZC[6][ip]=trap(sQPZC,&(pTrap[4][ip]),sRf,sFf);
-								psMax[k][ip]=trap(sQ,nullptr,sRi[QIidx[k]],sFl[QIidx[k]]);
-								if(k==5) psMax[6][ip]=trap(sQ,nullptr,sRf,sFf);
-							}
-							else {
-								psMax[k][ip]=trap(sQ,&(pTrap[QIidx[k]][ip]),sRi[QIidx[k]],sFl[QIidx[k]]);
-								if(k==5) psMax[6][ip]=trap(sQ,&(pTrap[4][ip]),sRf,sFf);
-							}
+						if(sPT[QIidx[k]]>0) {
+							if(re<0) tmi=-1;
+							else tmi=re+sPT[QIidx[k]];
+							if(fTrap) psMax[k][ip]=trap_pick_save(sQ,pTrap[QIidx[k]][ip],sRi[QIidx[k]],sFl[QIidx[k]],tmi);
+							else psMax[k][ip]=trap_pick_simp(sQ,sRi[QIidx[k]],sFl[QIidx[k]],tmi);
+							if(re<0) ptMax[QIidx[k]][ip]=-1;
+							else ptMax[QIidx[k]][ip]=tmi-re;
 						}
 						else {
-							if(fPZC) {
-								psMaxPZC[k][ip]=trap(sQPZC,nullptr,sRi[QIidx[k]],sFl[QIidx[k]]);
-								if(k==5) psMaxPZC[6][ip]=trap(sQPZC,nullptr,sRf,sFf);
-							}
-							psMax[k][ip]=trap(sQ,nullptr,sRi[QIidx[k]],sFl[QIidx[k]]);
-							if(k==5) psMax[6][ip]=trap(sQ,nullptr,sRf,sFf);
+							tmi=-1;
+							if(fTrap) psMax[k][ip]=trap_save(sQ,pTrap[QIidx[k]][ip],sRi[QIidx[k]],sFl[QIidx[k]],tmi);
+							else psMax[k][ip]=trap_simp(sQ,sRi[QIidx[k]],sFl[QIidx[k]],tmi);
+							if(re<0) ptMax[QIidx[k]][ip]=-1;
+							else ptMax[QIidx[k]][ip]=tmi-re;
 						}
-						//Time marks calculation only for large enough signals
+						if(k==5) {
+							tmi=-1;
+							if(fTrap) psMax[6][ip]=trap_save(sQ,pTrap[4][ip],sRf,sFf,tmi);
+							else psMax[6][ip]=trap_simp(sQ,sRf,sFf,tmi);
+							ptMax[4][ip]=tmi;
+						}
+						//Time marks calculation, only for large enough signals
 						if(fTime&&(psMax[k][ip]/psSBL[k][ip]>THRS)&&(re>20/sr[k])) {
-							psTARC[QIidx[k]][ip]=tcfd(sQPZC,sr[k],re,arc_frac,arc_del);
-							psT20[QIidx[k]][ip]=tcfd(sQPZC,sr[k],re,0.2,cfd_del);
-							psT70[QIidx[k]][ip]=tcfd(sQPZC,sr[k],re,0.7,cfd_del);
+							psTARC[QIidx[k]][ip]=tcfd(sQ,sr[k],re,arc_frac,arc_del);
+							psT20[QIidx[k]][ip]=tcfd(sQ,sr[k],re,0.2,cfd_del);
+							psT70[QIidx[k]][ip]=tcfd(sQ,sr[k],re,0.7,cfd_del);
 						}
 					}
 				}
@@ -844,10 +901,12 @@ int main(int argc,char *argv[]) {
 					fDeltaTag[ip]= (pev.dtag)[ip];
 					fTrig[ip]    = (pev.Ttrig)[ip];
 					for(int k=0;k<7;k++) {
-						sMax[k][ip]=psMax[k][ip]; sMaxPZC[k][ip]=psMaxPZC[k][ip];
+						sMax[k][ip]=psMax[k][ip];
 						if(k>=6) continue;
 						sBL[k][ip]=psBL[k][ip]; sSBL[k][ip]=psSBL[k][ip];
 						if(fWave||fTrap) iW[k][ip]=poff[k][ip];
+						if(k>=5) continue;
+						tMax[k][ip]=ptMax[k][ip];
 						if(k>=4) continue;
 						if(fTrig[ip]==65535) fE[k][ip]=(float)((pev.fE)[k][ip]/((double)(fRi[k])));
 						else fE[k][ip]=(float)((pev.fE)[k][ip]/1000.);

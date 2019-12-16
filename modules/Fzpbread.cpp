@@ -361,7 +361,8 @@ bool FzData::ReadFullEvent(EventStr *ev) {
 		int dettag = evset.ev(iev).block(iblk).fee(ifee).hit(iwav).dettag();
 		int valtag = evset.ev(iev).block(iblk).fee(ifee).hit(iwav).gttag();
 		if(dettag-valtag>=16384) valtag+=32768;
-		(ev->dtag).push_back(valtag-dettag);
+		if(dettag>0) (ev->dtag).push_back(valtag-dettag);
+		else (ev->dtag).push_back(-32768);
 		
 		if(evset.ev(iev).block(iblk).fee(ifee).hit(iwav).has_trigpat()) (ev->Ttrig).push_back(evset.ev(iev).block(iblk).fee(ifee).hit(iwav).trigpat());
 		else (ev->Ttrig).push_back(65535);

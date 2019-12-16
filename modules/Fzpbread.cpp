@@ -314,8 +314,7 @@ void FzData::ClearEvent(EventStr *ev) {
 	if(ev==nullptr) return;
 	(ev->blk).clear();
 	(ev->tel).clear();
-	(ev->dettag).clear();
-	(ev->gttag).clear();
+	(ev->dtag).clear();
 	(ev->Ttrig).clear();
 	for(int i=0;i<4;i++) (ev->fE)[i].clear();
 	for(int i=0;i<3;i++) (ev->fBL)[i].clear();
@@ -352,7 +351,6 @@ bool FzData::ReadFullEvent(EventStr *ev) {
 		}
 	}
 	
-	uint64_t gtmsb=((ev->Rtag)>>15);
 	ev->Mtot=0;
 	bool fOk=true;
 	double en[4],bl[3];
@@ -360,14 +358,10 @@ bool FzData::ReadFullEvent(EventStr *ev) {
 	for(;;) {
 		(ev->blk).push_back(evset.ev(iev).block(iblk).blkid());
 		(ev->tel).push_back(2*evset.ev(iev).block(iblk).fee(ifee).feeid()+evset.ev(iev).block(iblk).fee(ifee).hit(iwav).telid());
-		uint64_t dettag=(uint64_t)(evset.ev(iev).block(iblk).fee(ifee).hit(iwav).dettag());
-		uint64_t valtag=(uint64_t)(evset.ev(iev).block(iblk).fee(ifee).hit(iwav).gttag());
-		if((dettag>=16384)&&(valtag<16384)) {
-			valtag+=32768;
-			if(gtmsb>0) gtmsb--;
-		}
-		(ev->dettag).push_back(dettag+(gtmsb<<15));
-		(ev->gttag).push_back(valtag+(gtmsb<<15));
+		int dettag = evset.ev(iev).block(iblk).fee(ifee).hit(iwav).dettag();
+		int valtag = evset.ev(iev).block(iblk).fee(ifee).hit(iwav).gttag();
+		if(dettag-valtag>=16384) valtag+=32768;
+		(ev->dtag).push_back(valtag-dettag);
 		
 		if(evset.ev(iev).block(iblk).fee(ifee).hit(iwav).has_trigpat()) (ev->Ttrig).push_back(evset.ev(iev).block(iblk).fee(ifee).hit(iwav).trigpat());
 		else (ev->Ttrig).push_back(65535);

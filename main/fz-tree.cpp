@@ -317,7 +317,7 @@ int main(int argc,char *argv[]) {
 	printf("*******************************************\n");
 	printf("*   FAZIA tree builder from PB raw data   *\n");
 	printf("*            by Simone Valdre'            *\n");
-	printf("*           v1.02  (2019-12-05)           *\n");
+	printf("*           v1.03  (2019-12-16)           *\n");
 	printf("*******************************************\n");
 	printf("\n");
 	if(fin==NULL) {
@@ -438,9 +438,10 @@ int main(int argc,char *argv[]) {
 	
 	//Tree variables
 	ULong64_t treeEv,fEC;
-	uint16_t Mtot,fTrigRB,fRateInfo,fBlk[MAXMTOT],fQua[MAXMTOT],fTel[MAXMTOT],fDeltaTag[MAXMTOT],fTrig[MAXMTOT];
+	uint16_t Mtot,fTrigRB,fRateInfo,fBlk[MAXMTOT],fQua[MAXMTOT],fTel[MAXMTOT],fTrig[MAXMTOT];
 	unsigned fRun;
 	uint64_t fValTag;
+	int16_t fDeltaTag[MAXMTOT];
 	float fTempRB,trgDead[1],tri[12];
 	float fE[4][MAXMTOT],fBL[3][MAXMTOT],sMax[7][MAXMTOT],sMaxPZC[7][MAXMTOT];
 	float sBL[6][MAXMTOT],sSBL[6][MAXMTOT];
@@ -487,7 +488,7 @@ int main(int argc,char *argv[]) {
 	tree->Branch("fBlk",fBlk,"fBlk[Mtot]/s");				// Block ID
 	tree->Branch("fQua",fQua,"fQua[Mtot]/s");				// Quartet ID
 	tree->Branch("fTel",fTel,"fTel[Mtot]/s");				// Telescope ID
-	tree->Branch("fDeltaTag",fDeltaTag,"fDeltaTag[Mtot]/s");// Validation - local trigger delta (10 ns units)
+	tree->Branch("fDeltaTag",fDeltaTag,"fDeltaTag[Mtot]/S");// Validation - local trigger delta (10 ns units)
 	tree->Branch("fTrig",fTrig,"fTrig[Mtot]/s");			// Local trigger pattern
 	
 	//On-board shaped energies
@@ -840,7 +841,7 @@ int main(int argc,char *argv[]) {
 					fBlk[ip]     = (pev.blk)[ip];
 					fQua[ip]     = quac[(pev.tel)[ip]];
 					fTel[ip]     = telc[(pev.tel)[ip]];
-					fDeltaTag[ip]= (uint16_t)((pev.gttag)[ip]-(pev.dettag)[ip]);
+					fDeltaTag[ip]= (pev.dtag)[ip];
 					fTrig[ip]    = (pev.Ttrig)[ip];
 					for(int k=0;k<7;k++) {
 						sMax[k][ip]=psMax[k][ip]; sMaxPZC[k][ip]=psMaxPZC[k][ip];

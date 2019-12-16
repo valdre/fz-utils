@@ -32,7 +32,7 @@ typedef struct {
 	uint32_t Rcnorm;
 	int Mtot;
 	std::vector<int> blk,tel;
-	std::vector<uint64_t> dettag,gttag;
+	std::vector<int16_t> dtag;
 	std::vector<uint16_t> Ttrig;
 	std::vector<double> fE[4];
 	std::vector<double> fBL[3];

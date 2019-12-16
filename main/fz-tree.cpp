@@ -309,7 +309,6 @@ int ImaxParabolic(std::vector<int16_t> si,double &imax) {
 
 int main(int argc,char *argv[]) {
 	FILE *fin=NULL;
-	struct timeval tstart,tnow,tend,tdelta;
 	if(argc>1) {
 		fin=fopen(argv[1],"r");
 		if(fin==NULL) perror(argv[1]);
@@ -439,10 +438,10 @@ int main(int argc,char *argv[]) {
 	
 	//Tree variables
 	ULong64_t treeEv,fEC;
-	uint16_t Mtot,fTrigRB,fBlk[MAXMTOT],fQua[MAXMTOT],fTel[MAXMTOT],fTrig[MAXMTOT];
+	uint16_t Mtot,fTrigRB,fRateInfo,fBlk[MAXMTOT],fQua[MAXMTOT],fTel[MAXMTOT],fDeltaTag[MAXMTOT],fTrig[MAXMTOT];
 	unsigned fRun;
-	uint64_t fGTTagRB,fDetTag[MAXMTOT],fGTTag[MAXMTOT];
-	float fTempRB;
+	uint64_t fValTag;
+	float fTempRB,trgDead[1],tri[12];
 	float fE[4][MAXMTOT],fBL[3][MAXMTOT],sMax[7][MAXMTOT],sMaxPZC[7][MAXMTOT];
 	float sBL[6][MAXMTOT],sSBL[6][MAXMTOT];
 	float sTARC[4][MAXMTOT],sT20[4][MAXMTOT],sT70[4][MAXMTOT];
@@ -455,133 +454,150 @@ int main(int argc,char *argv[]) {
 	
 	TFile *fout=new TFile(fnout,"RECREATE");
 	fout->cd();
-	TTree *tout=new TTree("faziatree","Fazia data structure");
+	TTree *tree=new TTree("faziatree","Fazia data structure");
 	//***** Analysis information *****
-	tout->Branch("treeEv",&treeEv,"treeEv/l");		// Analysis internal event numbering
-	tout->Branch("Mtot",&Mtot,"Mtot/s");			// Total multiplicity
+	tree->Branch("treeEv",&treeEv,"treeEv/l");				// Analysis internal event numbering
+	tree->Branch("Mtot",&Mtot,"Mtot/s");					// Total multiplicity
+	tree->Branch("fRun",&fRun,"fRun/i");					// Run number from DAQ
 	
 	//***** Event information *****
-	tout->Branch("fRun",&fRun,"fRun/i");			// Run number from DAQ
-	tout->Branch("fEC",&fEC,"fEC/l");				// ReBo event counter (42 bits)
-	tout->Branch("fGTTagRB",&fGTTagRB,"fGTTagRB/l");// ReBo validation timestamp (25MHz)
-	tout->Branch("fTrigRB",&fTrigRB,"fTrigRB/s");	// ReBo trigger bitmask
-	tout->Branch("fTempRB",&fTempRB,"fTempRB/F");	// Pt100 read by ReBo
+	tree->Branch("fEC",&fEC,"fEC/l");						// ReBo event counter (42 bits)
+	tree->Branch("fValTag",&fValTag,"fValTag/l");			// ReBo validation timestamp (40 ns units)
+	tree->Branch("fTrigRB",&fTrigRB,"fTrigRB/s");			// ReBo trigger bitmask
+	tree->Branch("fTempRB",&fTempRB,"fTempRB/F");			// Pt100 read by ReBo
+	
+	//Trigger rates and dead time
+	tree->Branch("fRateInfo",&fRateInfo,"fRateInfo/s");				//Rate info flag (only 1 event every 10s)
+	tree->Branch("trgDead",trgDead,"trgDead[fRateInfo]/F");			//Dead Time %
+	tree->Branch("trgValRate",tri,"trgValRate[fRateInfo]/F");		//Validations per second
+	tree->Branch("trgRawRate",tri+1,"trgRawRate[fRateInfo]/F");		//Raw triggers per second
+	tree->Branch("trg1Rate",tri+2,"trg1Rate[fRateInfo]/F");			//Trigger 1 rate (cps)
+	tree->Branch("trg2Rate",tri+3,"trg2Rate[fRateInfo]/F");			//Trigger 2 rate (cps)
+	tree->Branch("trg3Rate",tri+4,"trg3Rate[fRateInfo]/F");			//Trigger 3 rate (cps)
+	tree->Branch("trg4Rate",tri+5,"trg4Rate[fRateInfo]/F");			//Trigger 4 rate (cps)
+	tree->Branch("trg5Rate",tri+6,"trg5Rate[fRateInfo]/F");			//Trigger 5 rate (cps)
+	tree->Branch("trg6Rate",tri+7,"trg6Rate[fRateInfo]/F");			//Trigger 6 rate (cps)
+	tree->Branch("trg7Rate",tri+8,"trg7Rate[fRateInfo]/F");			//Trigger 7 rate (cps)
+	tree->Branch("trg8Rate",tri+9,"trg8Rate[fRateInfo]/F");			//Trigger 8 rate (cps)
+	tree->Branch("trgManRate",tri+10,"trgManRate[fRateInfo]/F");	//Manual trigger rate (cps)
+	tree->Branch("trgExtRate",tri+11,"trgExtRate[fRateInfo]/F");	//External trigger rate (cps)
 	
 	//***** Particle information *****
 	//Telescope ID&Tag
-	tout->Branch("fBlk",fBlk,"fBlk[Mtot]/s");		// Block ID
-	tout->Branch("fQua",fQua,"fQua[Mtot]/s");		// Quartet ID
-	tout->Branch("fTel",fTel,"fTel[Mtot]/s");		// Telescope ID
-	tout->Branch("fDetTag",fDetTag,"fDetTag[Mtot]/l");	// Local trigger timestamp (100MHz)
-	tout->Branch("fGTTag",fGTTag,"fGTTag[Mtot]/l");		// Validation timestamp (100MHz)
-	tout->Branch("fTrig",fTrig,"fTrig[Mtot]/s");	// Local trigger pattern
+	tree->Branch("fBlk",fBlk,"fBlk[Mtot]/s");				// Block ID
+	tree->Branch("fQua",fQua,"fQua[Mtot]/s");				// Quartet ID
+	tree->Branch("fTel",fTel,"fTel[Mtot]/s");				// Telescope ID
+	tree->Branch("fDeltaTag",fDeltaTag,"fDeltaTag[Mtot]/s");// Validation - local trigger delta (10 ns units)
+	tree->Branch("fTrig",fTrig,"fTrig[Mtot]/s");			// Local trigger pattern
 	
 	//On-board shaped energies
-	tout->Branch("fQH1",fE[0],"fQH1[Mtot]/F");
-	tout->Branch("fQ2",fE[1],"fQ2[Mtot]/F");
-	tout->Branch("fQ3slow",fE[2],"fQ3slow[Mtot]/F");
-	tout->Branch("fQ3fast",fE[3],"fQ3fast[Mtot]/F");
+	tree->Branch("fQH1",fE[0],"fQH1[Mtot]/F");
+	tree->Branch("fQ2",fE[1],"fQ2[Mtot]/F");
+	tree->Branch("fQ3slow",fE[2],"fQ3slow[Mtot]/F");
+	tree->Branch("fQ3fast",fE[3],"fQ3fast[Mtot]/F");
 	
 	//On-board baselines
-	tout->Branch("fQH1bl",fBL[0],"fQH1bl[Mtot]/F");
-	tout->Branch("fQ2bl",fBL[1],"fQ2bl[Mtot]/F");
-	tout->Branch("fQ3bl",fBL[2],"fQ3bl[Mtot]/F");
+	tree->Branch("fQH1bl",fBL[0],"fQH1bl[Mtot]/F");
+	tree->Branch("fQ2bl",fBL[1],"fQ2bl[Mtot]/F");
+	tree->Branch("fQ3bl",fBL[2],"fQ3bl[Mtot]/F");
 	
 	//Off-line shaped energies (NOT pole-zero compensated) and current maxima
-	tout->Branch("sQH1max",sMax[0],"sQH1max[Mtot]/F");
-	tout->Branch("sI1max",sMax[1],"sI1max[Mtot]/F");
-	tout->Branch("sQL1max",sMax[2],"sQL1max[Mtot]/F");
-	tout->Branch("sQ2max",sMax[3],"sQ2max[Mtot]/F");
-	tout->Branch("sI2max",sMax[4],"sI2max[Mtot]/F");
-	tout->Branch("sQ3max",sMax[5],"sQ3max[Mtot]/F");
-	tout->Branch("sQ3fast",sMax[6],"sQ3fast[Mtot]/F");
+	tree->Branch("sQH1max",sMax[0],"sQH1max[Mtot]/F");
+	tree->Branch("sI1max",sMax[1],"sI1max[Mtot]/F");
+	tree->Branch("sQL1max",sMax[2],"sQL1max[Mtot]/F");
+	tree->Branch("sQ2max",sMax[3],"sQ2max[Mtot]/F");
+	tree->Branch("sI2max",sMax[4],"sI2max[Mtot]/F");
+	tree->Branch("sQ3max",sMax[5],"sQ3max[Mtot]/F");
+	tree->Branch("sQ3fast",sMax[6],"sQ3fast[Mtot]/F");
 	
 	if(fPZC) {
 		//Off-line shaped energies (pole-zero compensated)
-		tout->Branch("sQH1maxPZC",sMaxPZC[0],"sQH1maxPZC[Mtot]/F");
-		tout->Branch("sQL1maxPZC",sMaxPZC[2],"sQL1maxPZC[Mtot]/F");
-		tout->Branch("sQ2maxPZC",sMaxPZC[3],"sQ2maxPZC[Mtot]/F");
-		tout->Branch("sQ3maxPZC",sMaxPZC[5],"sQ3maxPZC[Mtot]/F");
-		tout->Branch("sQ3fastPZC",sMaxPZC[6],"sQ3fastPZC[Mtot]/F");
+		tree->Branch("sQH1maxPZC",sMaxPZC[0],"sQH1maxPZC[Mtot]/F");
+		tree->Branch("sQL1maxPZC",sMaxPZC[2],"sQL1maxPZC[Mtot]/F");
+		tree->Branch("sQ2maxPZC",sMaxPZC[3],"sQ2maxPZC[Mtot]/F");
+		tree->Branch("sQ3maxPZC",sMaxPZC[5],"sQ3maxPZC[Mtot]/F");
+		tree->Branch("sQ3fastPZC",sMaxPZC[6],"sQ3fastPZC[Mtot]/F");
 	}
 	
 	//Base line level
-	tout->Branch("sQH1bl",sBL[0],"sQH1bl[Mtot]/F");
-	tout->Branch("sI1bl",sBL[1],"sI1bl[Mtot]/F");
-	tout->Branch("sQL1bl",sBL[2],"sQL1bl[Mtot]/F");
-	tout->Branch("sQ2bl",sBL[3],"sQ2bl[Mtot]/F");
-	tout->Branch("sI2bl",sBL[4],"sI2bl[Mtot]/F");
-	tout->Branch("sQ3bl",sBL[5],"sQ3bl[Mtot]/F");
+	tree->Branch("sQH1bl",sBL[0],"sQH1bl[Mtot]/F");
+	tree->Branch("sI1bl",sBL[1],"sI1bl[Mtot]/F");
+	tree->Branch("sQL1bl",sBL[2],"sQL1bl[Mtot]/F");
+	tree->Branch("sQ2bl",sBL[3],"sQ2bl[Mtot]/F");
+	tree->Branch("sI2bl",sBL[4],"sI2bl[Mtot]/F");
+	tree->Branch("sQ3bl",sBL[5],"sQ3bl[Mtot]/F");
 	
 	//Base line std. dev.
-	tout->Branch("sQH1sbl",sSBL[0],"sQH1sbl[Mtot]/F");
-	tout->Branch("sI1sbl",sSBL[1],"sI1sbl[Mtot]/F");
-	tout->Branch("sQL1sbl",sSBL[2],"sQL1sbl[Mtot]/F");
-	tout->Branch("sQ2sbl",sSBL[3],"sQ2sbl[Mtot]/F");
-	tout->Branch("sI2sbl",sSBL[4],"sI2sbl[Mtot]/F");
-	tout->Branch("sQ3sbl",sSBL[5],"sQ3sbl[Mtot]/F");
+	tree->Branch("sQH1sbl",sSBL[0],"sQH1sbl[Mtot]/F");
+	tree->Branch("sI1sbl",sSBL[1],"sI1sbl[Mtot]/F");
+	tree->Branch("sQL1sbl",sSBL[2],"sQL1sbl[Mtot]/F");
+	tree->Branch("sQ2sbl",sSBL[3],"sQ2sbl[Mtot]/F");
+	tree->Branch("sI2sbl",sSBL[4],"sI2sbl[Mtot]/F");
+	tree->Branch("sQ3sbl",sSBL[5],"sQ3sbl[Mtot]/F");
 	
 	//Number of triggers on a very fast shaped signal (for pile-up rejection)
-// 	tout->Branch("nQH1trig",nTrg,"nQH1trig/s");
-// 	tout->Branch("nQL1trig",nTrg+1,"nQL1trig/s");
-// 	tout->Branch("nQ2trig",nTrg+2,"nQ2trig/s");
-// 	tout->Branch("nQ3trig",nTrg+3,"nQ3trig/s");
+// 	tree->Branch("nQH1trig",nTrg,"nQH1trig/s");
+// 	tree->Branch("nQL1trig",nTrg+1,"nQL1trig/s");
+// 	tree->Branch("nQ2trig",nTrg+2,"nQ2trig/s");
+// 	tree->Branch("nQ3trig",nTrg+3,"nQ3trig/s");
 	
 	if(fTime) {
 	//Time marks from charge signals
-		tout->Branch("sQH1arc",sTARC[0],"sQH1arc[Mtot]/F");		// ARC-CFD time mark
-		tout->Branch("sQH1cfd20",sT20[0],"sQH1cfd20[Mtot]/F");	// time mark at 20%
-		tout->Branch("sQH1cfd70",sT70[0],"sQH1cfd70[Mtot]/F");	// time mark at 70%
+		tree->Branch("sQH1arc",sTARC[0],"sQH1arc[Mtot]/F");		// ARC-CFD time mark
+		tree->Branch("sQH1cfd20",sT20[0],"sQH1cfd20[Mtot]/F");	// time mark at 20%
+		tree->Branch("sQH1cfd70",sT70[0],"sQH1cfd70[Mtot]/F");	// time mark at 70%
 		
-		tout->Branch("sQL1arc",sTARC[1],"sQL1arc[Mtot]/F");		// ARC-CFD time mark
-		tout->Branch("sQL1cfd20",sT20[1],"sQL1cfd20[Mtot]/F");	// time mark at 20%
-		tout->Branch("sQL1cfd70",sT70[1],"sQL1cfd70[Mtot]/F");	// time mark at 70%
+		tree->Branch("sQL1arc",sTARC[1],"sQL1arc[Mtot]/F");		// ARC-CFD time mark
+		tree->Branch("sQL1cfd20",sT20[1],"sQL1cfd20[Mtot]/F");	// time mark at 20%
+		tree->Branch("sQL1cfd70",sT70[1],"sQL1cfd70[Mtot]/F");	// time mark at 70%
 		
-		tout->Branch("sQ2arc",sTARC[2],"sQ2arc[Mtot]/F");		// ARC-CFD time mark
-		tout->Branch("sQ2cfd20",sT20[2],"sQ2cfd20[Mtot]/F");	// time mark at 20%
-		tout->Branch("sQ2cfd70",sT70[2],"sQ2cfd70[Mtot]/F");	// time mark at 70%
+		tree->Branch("sQ2arc",sTARC[2],"sQ2arc[Mtot]/F");		// ARC-CFD time mark
+		tree->Branch("sQ2cfd20",sT20[2],"sQ2cfd20[Mtot]/F");	// time mark at 20%
+		tree->Branch("sQ2cfd70",sT70[2],"sQ2cfd70[Mtot]/F");	// time mark at 70%
 		
-		tout->Branch("sQ3arc",sTARC[3],"sQ3arc[Mtot]/F");		// ARC-CFD time mark
-		tout->Branch("sQ3cfd20",sT20[3],"sQ3cfd20[Mtot]/F");	// time mark at 20%
-		tout->Branch("sQ3cfd70",sT70[3],"sQ3cfd70[Mtot]/F");	// time mark at 70%
+		tree->Branch("sQ3arc",sTARC[3],"sQ3arc[Mtot]/F");		// ARC-CFD time mark
+		tree->Branch("sQ3cfd20",sT20[3],"sQ3cfd20[Mtot]/F");	// time mark at 20%
+		tree->Branch("sQ3cfd70",sT70[3],"sQ3cfd70[Mtot]/F");	// time mark at 70%
 	}
 	
 	if(fWave||fTrap) {
 		//Waveform offsets, useful to plot in interactive mode:
 		//e.g.: faziatree->Draw("wQ3:Iteration$-iQ3","fBlk==4&&fQua==4&&fTel==2","l",1,47);
-		tout->Branch("iQH1",iW[0],"iQH1[Mtot]/i");
-		tout->Branch("iI1",iW[1],"iI1[Mtot]/i");
-		tout->Branch("iQL1",iW[2],"iQL1[Mtot]/i");
-		tout->Branch("iQ2",iW[3],"iQ2[Mtot]/i");
-		tout->Branch("iI2",iW[4],"iI2[Mtot]/i");
-		tout->Branch("iQ3",iW[5],"iQ3[Mtot]/i");
+		tree->Branch("iQH1",iW[0],"iQH1[Mtot]/i");
+		tree->Branch("iI1",iW[1],"iI1[Mtot]/i");
+		tree->Branch("iQL1",iW[2],"iQL1[Mtot]/i");
+		tree->Branch("iQ2",iW[3],"iQ2[Mtot]/i");
+		tree->Branch("iI2",iW[4],"iI2[Mtot]/i");
+		tree->Branch("iQ3",iW[5],"iQ3[Mtot]/i");
 	}
 	if(fWave) {
 		//Waveforms
-		tout->Branch("wQH1",fW);
-		tout->Branch("wI1",fW+1);
-		tout->Branch("wQL1",fW+2);
-		tout->Branch("wQ2",fW+3);
-		tout->Branch("wI2",fW+4);
-		tout->Branch("wQ3",fW+5);
+		tree->Branch("wQH1",fW);
+		tree->Branch("wI1",fW+1);
+		tree->Branch("wQL1",fW+2);
+		tree->Branch("wQ2",fW+3);
+		tree->Branch("wI2",fW+4);
+		tree->Branch("wQ3",fW+5);
 	}
 	if(fTrap) {
 		//Trapezoidal shaped signals
-		tout->Branch("tQH1",tW);
-		tout->Branch("tQL1",tW+1);
-		tout->Branch("tQ2",tW+2);
-		tout->Branch("tQ3slow",tW+3);
-		tout->Branch("tQ3fast",tW+4);
+		tree->Branch("tQH1",tW);
+		tree->Branch("tQL1",tW+1);
+		tree->Branch("tQ2",tW+2);
+		tree->Branch("tQ3slow",tW+3);
+		tree->Branch("tQ3fast",tW+4);
 	}
+	
+	//Common variables
+	struct timeval tstart,tend,tdelta;
+	uint64_t sectot,oldsec=0;
+	double usectot;
+	ULong64_t glevent=0,oldev=0;
+	bool fStart=true,fGo=true;
 	
 	//Start of analysis: measuring time!
 	gettimeofday(&tstart,NULL);
-	tend=tstart;
-	//Global variables
-	ULong64_t glevent=0,oldev=0,milestone=100,oldmile=0;
-	uint64_t sectot;
-	double usectot,usecpart;
-	bool fStart=true,fGo=true;
+	
 	#pragma omp parallel
 	{
 		//private copies
@@ -606,21 +622,21 @@ int main(int argc,char *argv[]) {
 					if(fStart) fStart=false;
 					if(oldev<glevent) {
 						if((evmax>=0)&&(((long long)glevent)>evmax)) {fGo=false; glevent--;}
-						//Predictive logic to write on disk (and print progress on screen) every 1s
-						if(glevent>=milestone) {
-							gettimeofday(&tnow,NULL);
-							timersub(&tnow,&tstart,&tdelta);
+						//Check time every 10 events; print progress on screen every ~1s
+						if(glevent%10==0) {
+							gettimeofday(&tend,NULL);
+							timersub(&tend,&tstart,&tdelta);
 							sectot=tdelta.tv_sec;
-							usectot=(double)(tdelta.tv_usec)+1000000.*((double)(tdelta.tv_sec));
-							if(tdelta.tv_usec>=500000) sectot++;
-							timersub(&tnow,&tend,&tdelta);
-							usecpart=(double)(tdelta.tv_usec)+1000000.*((double)(tdelta.tv_sec));
-							tend=tnow;
-							tmp=1000000.*((double)(glevent-oldmile))/usecpart;
-							printf("\033[A\033[1m%04lu:%02lu \033[1;35mRun %06d \033[1;32mEv %9Lu\033[0;39m [%6.0f ev/s]\n",sectot/60,sectot%60,pev.run,glevent,tmp);
-							milestone=glevent+1000000.*((double)glevent)/usectot;
-							oldmile=glevent;
+							if(sectot>oldsec) {
+								oldsec=sectot;
+								usectot=(double)(tdelta.tv_usec)+1000000.*((double)(tdelta.tv_sec));
+								if(tdelta.tv_usec>=500000) sectot++;
+								tmp=1000000.*((double)glevent)/usectot;
+								printf("\033[A\033[1m%04lu:%02lu \033[1;35mRun %06d \033[1;32mEv %9Lu\033[0;39m [%6.0f ev/s]\n",sectot/60,sectot%60,pev.run,glevent,tmp);
+							}
 						}
+						
+						//Write on disk every 10000 events
 						if(glevent%10000==0) {
 							fout->Write();
 							fout->Purge();
@@ -802,22 +818,30 @@ int main(int argc,char *argv[]) {
 			{
 				//Event variables
 				treeEv=pevent; Mtot=pev.Mtot; fRun=pev.run;
-				fEC=pev.ec; fGTTagRB=pev.Rtag; fTrigRB=pev.Rtrig;
+				fEC=pev.ec; fValTag=pev.Rtag; fTrigRB=pev.Rtrig;
 				if(pev.Rtemp==0) fTempRB=1000;
 				else if(pev.Rtemp>=32767) fTempRB=2000;
 				else {
 					tmp=(double)(pev.Rtemp) + ran.Uniform(-0.5,0.5);
 					fTempRB=(float)(-246.192+3.39245e-2*tmp+1.99014e-7*tmp*tmp);
 				}
+				if(pev.Rcnorm>0) {
+					fRateInfo=1;
+					if((pev.Rcounters)[1]>0) trgDead[0]=((float)((pev.Rcounters)[1]-(pev.Rcounters)[0]))/((float)((pev.Rcounters)[1]));
+					for(int ic=0;ic<12;ic++) tri[ic]=1e6*((float)((pev.Rcounters)[ic]))/((float)(pev.Rcnorm));
+				}
+				else {
+					fRateInfo=0; trgDead[0]=0;
+					for(int ic=0;ic<12;ic++) tri[ic]=0;
+				}
 				
 				//Telescope variables
 				for(int ip=0;ip<(pev.Mtot);ip++) {
-					fBlk[ip]   = (pev.blk)[ip];
-					fQua[ip]   = quac[(pev.tel)[ip]];
-					fTel[ip]   = telc[(pev.tel)[ip]];
-					fDetTag[ip]= (pev.dettag)[ip];
-					fGTTag[ip] = (pev.gttag)[ip];
-					fTrig[ip]  = (pev.Ttrig)[ip];
+					fBlk[ip]     = (pev.blk)[ip];
+					fQua[ip]     = quac[(pev.tel)[ip]];
+					fTel[ip]     = telc[(pev.tel)[ip]];
+					fDeltaTag[ip]= (uint16_t)((pev.gttag)[ip]-(pev.dettag)[ip]);
+					fTrig[ip]    = (pev.Ttrig)[ip];
 					for(int k=0;k<7;k++) {
 						sMax[k][ip]=psMax[k][ip]; sMaxPZC[k][ip]=psMaxPZC[k][ip];
 						if(k>=6) continue;
@@ -836,7 +860,7 @@ int main(int argc,char *argv[]) {
 					if(fWave) fW[k]=(pev.wf)[k];
 					if(fTrap&&(k<5)) tW[k]=pTrap[k];
 				}
-				tout->Fill();
+				tree->Fill();
 			}
 		}
 	}

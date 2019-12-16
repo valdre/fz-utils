@@ -17,4 +17,4 @@ fz-meter: main/fz-meter.cpp modules/FzMeterDict.cxx modules/FzUDP.o
 	g++ -Wall -Wextra $^ -Imodules -lm `root-config --cflags --glibs` -o $@
 
 clean:
-	rm -f fz-* modules/*.pb.* modules/*.o modules/*Dict.* *.d *.pcm AutoDict*
+	rm -f fz-* modules/*.pb.* modules/*.o modules/*Dict.* *.d *.pcm modules/*.pcm AutoDict*

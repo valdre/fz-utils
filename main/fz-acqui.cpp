@@ -129,6 +129,14 @@ void clearevent(event &ev) {
 	return;
 }
 
+void clearvec(std::vector< std::vector<int16_t> > &vec) {
+	for(unsigned i=0;i<vec.size();i++) {
+		vec[i].clear();
+	}
+	vec.clear();
+	return;
+}
+
 void WriteEv(event *ev,TTree *tree) {
 	int irb=-1;
 	wav *dt=nullptr;
@@ -174,6 +182,7 @@ void WriteEv(event *ev,TTree *tree) {
 	}
 	
 	for(int i=0;i<6;i++) off[i]=0;
+	clearvec(wQH1); clearvec(wI1); clearvec(wQL1); clearvec(wQ2); clearvec(wI2); clearvec(wQ3);
 	
 	for(unsigned ib=0;ib<ev->b.size();ib++) {
 		if(ev->b[ib].blkid==0x7FF) continue;
@@ -274,7 +283,7 @@ int main(int argc,char **argv) {
 	printf("*******************************************\n");
 	printf("*      FAZIA mini acquisition to ROOT     *\n");
 	printf("*            by Simone Valdre'            *\n");
-	printf("*            v1.2 (2019-12-12)            *\n");
+	printf("*            v1.3 (2019-12-16)            *\n");
 	printf("*******************************************\n");
 	printf("\n");
 	

@@ -28,8 +28,8 @@
 typedef struct {
 	int run;
 	uint64_t ec,Rtag;
-	uint16_t Rtrig;
-	uint16_t Rtemp;
+	uint16_t Rtrig,Rtemp,Rcounters[12];
+	uint32_t Rcnorm;
 	int Mtot;
 	std::vector<int> blk,tel;
 	std::vector<uint64_t> dettag,gttag;

@@ -1,8 +1,5 @@
 #include "Fzpbread.h"
 
-
-
-
 //********* Public functions
 
 FzData::FzData(const std::string dir,const std::string prefix,const int firstrun,const int lastrun) {
@@ -340,26 +337,19 @@ bool FzData::ReadFullEvent(EventStr *ev) {
 	ClearEvent(ev);
 	ev->run=crun;
 	ev->ec=(uint64_t)(evset.ev(iev).ec());
-	ev->Rtag=0; ev->Rtrig=0; ev->Rtemp=32767;
-	bool fEC=false,fGT=false,fTrig=false,fTemp=false;
+	ev->Rtag=0; ev->Rtrig=0; ev->Rtemp=32767; ev->Rcnorm=0;
+	for(int i=0;i<12;i++) ev->Rcounters[i]=0;
 	for(int i=0;i<evset.ev(iev).trinfo_size();i++) {
-		if(evset.ev(iev).trinfo(i).id()==269) {
-			ev->Rtag=evset.ev(iev).trinfo(i).value();
-			fGT=true;
+		switch(evset.ev(iev).trinfo(i).id()) {
+			case 256: case 257: case 258: case 259: case 260: case 261: case 262: case 263: case 264: case 265: case 266: case 267:
+				ev->Rcounters[evset.ev(iev).trinfo(i).id()-256] = evset.ev(iev).trinfo(i).value();
+				break;
+			case 268: ev->Rcnorm = evset.ev(iev).trinfo(i).value(); break;
+			case 269: ev->Rtag   = evset.ev(iev).trinfo(i).value(); break;
+			case 270: ev->ec     = evset.ev(iev).trinfo(i).value(); break;
+			case 271: ev->Rtrig  = evset.ev(iev).trinfo(i).value(); break;
+			case 272: ev->Rtemp  = evset.ev(iev).trinfo(i).value();
 		}
-		if(evset.ev(iev).trinfo(i).id()==270) {
-			ev->ec=evset.ev(iev).trinfo(i).value();
-			fEC=true;
-		}
-		if(evset.ev(iev).trinfo(i).id()==271) {
-			ev->Rtrig=evset.ev(iev).trinfo(i).value();
-			fTrig=true;
-		}
-		if(evset.ev(iev).trinfo(i).id()==272) {
-			ev->Rtemp=evset.ev(iev).trinfo(i).value();
-			fTemp=true;
-		}
-		if(fEC&&fGT&&fTrig&&fTemp) break;
 	}
 	
 	uint64_t gtmsb=((ev->Rtag)>>15);

@@ -13,17 +13,6 @@
 
 #define MAXMTOT 200
 
-//window for baseline calculation (in ns)
-#define TBL      200
-//time before the threshold that is not used for baseline calculation
-#define DELTAB    40
-#define DELTABI  100
-
-//      TBL    DELTAB
-//  |---------|------|
-//                     ____
-// __________________/
-
 //to recognize the edge, signal must be over threshold for (ns):
 #define TOVER 500
 //signal amplitude threshold expressed in sigma baseline units
@@ -80,27 +69,6 @@ void leggiriga(char *striga,frase *riga) {
 	riga->n--;
 	return;
 }
-
-/*
-double mean(std::vector<double>&si,int i1,int i2) {
-	double m1=0,m0=0;
-	for(int i=i1;i<i2;i++) {
-		m1+=si[i]*(double)i;
-		m0+=si[i];
-	}
-	return m1/m0;
-}
-
-double sigma(std::vector<double>&si,int i1,int i2,double mean) {
-	double m2=0,m0=0;
-	for(int i=i1;i<i2;i++) {
-		m2+=si[i]*((double)i-mean)*((double)i-mean);
-		m0+=si[i];
-	}
-	if(m2>0&&m0>0) return sqrt(m2/m0);
-	else return -1;
-}
-*/
 
 double secanti(TSpline3 *sp,double *t,bool pos=false) {
 	double y,zc;
@@ -370,7 +338,7 @@ int main(int argc,char *argv[]) {
 	printf("*******************************************\n");
 	printf("*   FAZIA tree builder from PB raw data   *\n");
 	printf("*            by Simone Valdre'            *\n");
-	printf("*           v1.02  (2019-12-05)           *\n");
+	printf("*           v1.03  (2019-12-17)           *\n");
 	printf("*******************************************\n");
 	printf("\n");
 	if(fin==NULL) {
@@ -386,7 +354,8 @@ int main(int argc,char *argv[]) {
 	long long evmax=-1;
 	uint16_t trigpat=0;
 	float fBf[3]={1,1,1};
-	unsigned fRi[4]={200,200,200,70};
+	float sBLw=500,sBLp=100,sBLi=100;
+	unsigned fRi[4]={200,500,200,200};
 	unsigned sRi[4]={200,500,200,200};
 	unsigned sRf=200;
 	unsigned sFl[4]={100,250,100,1000};
@@ -441,6 +410,11 @@ int main(int argc,char *argv[]) {
 		}
 		if((strcmp(riga.com,"fQ3bf")==0)&&(riga.n>0)) {
 			fBf[2]=(float)atoi(riga.arg[0]);
+		}
+		if((strcmp(riga.com,"sBL")==0)&&(riga.n>2)) {
+			sBLw=(float)atoi(riga.arg[0]);
+			sBLp=(float)atoi(riga.arg[1]);
+			sBLi=(float)atoi(riga.arg[2]);
 		}
 		if((strcmp(riga.com,"sQH1S")==0)&&(riga.n>1)) {
 			sRi[0]=atoi(riga.arg[0]);
@@ -752,9 +726,9 @@ int main(int argc,char *argv[]) {
 				}
 				
 				for(int k=0;k<6;k++) {
-					unsigned tbl     = TBL/sr[k];
-					unsigned deltab  = DELTAB/sr[k];
-					unsigned deltabi = DELTABI/sr[k];
+					unsigned tbl     = sBLw/sr[k];
+					unsigned deltab  = sBLp/sr[k];
+					unsigned deltabi = sBLi/sr[k];
 					unsigned wsize   = (pev.wf)[k][ip].size();
 					
 					if(wsize<tbl) continue;
@@ -774,7 +748,7 @@ int main(int argc,char *argv[]) {
 					}
 					if(re) continue;
 					
-					//Fast baseline estimation (on TBL ns)
+					//Fast baseline estimation (on sBLw ns)
 					psBL[k][ip]=0; psSBL[k][ip]=0;
 					for(unsigned i=0;i<tbl;i++) psBL[k][ip]+=(pev.wf)[k][ip][i];
 					psBL[k][ip]/=(double)tbl;

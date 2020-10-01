@@ -316,7 +316,9 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 		else ret=recvfrom(sockfd,(void *)reply,100000,MSG_DONTWAIT,&src,&dim);
 	}
 	if(err==-10) {
-		printf(RED "FzSC::Send" NRM " socked died\n");
+		fSockOK=false;
+		close(sockfd);
+		printf(RED "FzSC::Send" NRM " socket died\n");
 		return err;
 	}
 	

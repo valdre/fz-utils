@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
 		if(pproc==0) { //processo figlio
 			double trig[12],time;
 			int bitmask;
-			FzUDP sock;
+			FzSC sock;
 			close(pd[0]);
 			signal(SIGUSR2,handle_usr2);
 			go=1;

@@ -10,7 +10,7 @@
 #include <TGClient.h>
 #include <TGButton.h>
 #include <TGTextBuffer.h>
-#include "FzUDP.h"
+#include "FzSC.h"
 
 #define NRIGHE 13
 

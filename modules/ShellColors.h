@@ -21,4 +21,7 @@
 #define Mag "\033[0;35m"
 #define Cya "\033[0;36m"
 
+//OTHER SHELL ESCAPE SEQUENCES
+#define  UP "\033[A"
+
 #endif

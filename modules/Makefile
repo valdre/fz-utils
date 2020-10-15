@@ -1,4 +1,4 @@
-all: FzEventSet.pb.o Fzpbread.o FzSC.o FzMeterDict.cxx
+all: FzEventSet.pb.o Fzpbread.o FzSC.o FzMeterDict.cxx FzTest.o
 	
 
 FzEventSet.pb.cpp: FzEventSet.proto

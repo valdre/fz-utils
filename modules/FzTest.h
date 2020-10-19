@@ -9,6 +9,8 @@
 #define LASTVPICV3 "28/01/2016"
 #define LASTVPICV4 "13/03/2018"
 #define LASTVFPGA  "19/09/2019"
+//HV ramp (in V/s)
+#define HVRAMP 20
 
 //Constants
 static const char lFPGA[2][2]={"A","B"};
@@ -45,6 +47,7 @@ public:
 	FzTest(FzSC *sck, const int Blk=0, const int Fee=0, const bool verbose=false);
 	~FzTest();
 	
+	void KeithleySetup(FzSC *sck);
 	int FastTest(bool hv=false);
 	void Report();
 	int Guided();
@@ -57,11 +60,13 @@ private:
 	int OffCheck(const int ch);
 	int OffCal();
 	int OffCurve();
+	int WaitHVready(int c);
+	int IVmeas(int c,int *V,int *I,bool wait=true);
 	int ApplyHV(int c,int V);
 	int HVtest();
 	
 	bool fTested,fVerb;
-	FzSC *sock;
+	FzSC *sock,*ksock;
 	int blk,fee;
 	int hvstat[5];
 	int failmask;

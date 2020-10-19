@@ -1,13 +1,27 @@
 #include "FzSC.h"
 
-FzSC::FzSC(const bool serial, const char *target) {
-	if(serial) {
-		fSerial=1;
-		if(TTYOpen(target)<0) fSockOK=false;
+FzSC::FzSC(const bool serial, const char *target, const bool keithley) {
+	if(keithley) {
+		fKeith=true;
+		if(serial) {
+			fSerial=true;
+			if(TTYOpen(target, B19200)<0) fSockOK=false;
+			else fSockOK=true;
+		}
+		else {
+			fSerial=0;
+			fSockOK=false;
+		}
+	}
+	else if(serial) {
+		fKeith=false;
+		fSerial=true;
+		if(TTYOpen(target, B115200)<0) fSockOK=false;
 		else fSockOK=true;
 	}
 	else {
-		fSerial=0;
+		fKeith=false;
+		fSerial=true;
 		if(UDPOpen(target)<0) fSockOK=false;
 		else fSockOK=true;
 	}
@@ -110,7 +124,7 @@ int FzSC::SCParse(char *sout,const uint8_t *buffer,const int N) {
 	else return -1;
 }
 
-int FzSC::TTYOpen(const char *device) {
+int FzSC::TTYOpen(const char *device, speed_t speed) {
 	struct termios config;
 	
 	//Open device
@@ -138,7 +152,7 @@ int FzSC::TTYOpen(const char *device) {
 	config.c_cc[VMIN]  = 1; config.c_cc[VTIME] = 0;
 	
 	// Communication speed (simple version, using the predefined constants)
-	if(cfsetispeed(&config,B115200)<0 || cfsetospeed(&config,B115200)<0) { perror(device); close(sockfd); return -1;}
+	if(cfsetispeed(&config, speed)<0 || cfsetospeed(&config, speed)<0) { perror(device); close(sockfd); return -1;}
 	
 	// Finally, apply the configuration
 	if(tcsetattr(sockfd,TCSAFLUSH,&config)<0) { perror(device); close(sockfd); return -1;}
@@ -193,7 +207,11 @@ int FzSC::UDPOpen(const char *ndst) {
 int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/*=0*/) {
 	//Check file descriptor
 	if(!fSockOK) {
-		printf(RED "FzSC::Send" NRM " socket is not open...\n");
+		printf(RED "Send    " NRM " socket is not open\n");
+		return -10;
+	}
+	if(fKeith) {
+		printf(RED "Send    " NRM " wrong device. Use KSend with Keithley!\n");
 		return -10;
 	}
 	
@@ -336,7 +354,11 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 
 int FzSC::Meter(double *time,double *trig,int *bitmask) {
 	if(!fSockOK) {
-		printf(RED "FzSC::Meter" NRM " socket is not open...\n");
+		printf(RED "Meter   " NRM " socket is not open.\n");
+		return -10;
+	}
+	if(fKeith) {
+		printf(RED "Meter   " NRM " wrong device. Use KSend with Keithley!\n");
 		return -10;
 	}
 	
@@ -358,6 +380,90 @@ int FzSC::Meter(double *time,double *trig,int *bitmask) {
 		else return -1;
 	}
 	return 0;
+}
+
+int FzSC::KSend(const char *data,char *reply,int verb/*=0*/) {
+	//Check file descriptor
+	if(!fSockOK) {
+		printf(RED "KSend   " NRM " socket is not open\n");
+		return -10;
+	}
+	if(!fKeith) {
+		printf(RED "KSend   " NRM " wrong device. Use Send with FEE!\n");
+		return -10;
+	}
+	
+	char query[MLENG], part[MLENG];
+	int N,M,i,j,trep,tent,err=0;
+	ssize_t ret;
+	struct timeval tstart,tstop,delta;
+	
+	if(verb) printf(GRN "[sending]" NRM" %s\n",data);
+	strcpy(query,data);
+	N=strlen(data);
+	query[N++]='\n'; query[N]='\0';
+	
+	//Loop for 3 query attempts
+	for(tent=0;tent<MAXAT;tent++) {
+		//Send SC query and store the time
+		ret=write(sockfd,query,N);
+		if(ret!=N) {err=-10; break;}
+		if(reply==nullptr) break; //No reply is expected
+		
+		gettimeofday(&tstart,NULL);
+		M=0; err=0; j=-1;
+		//Wait at least 10ms (no data arrive before)
+		usleep(10000);
+		for(;;) {
+			//Read reply message piece by piece
+			ret=read(sockfd,part,MLENG);
+			if(ret<0&&errno==EAGAIN) ret=0;
+			if(ret<0) {err=-10; break;}
+			if(ret+M>=MLENG) {err=-3; break;} //Too long answer is treated as an inconsistent reply
+			gettimeofday(&tstop,NULL);
+			timersub(&tstop,&tstart,&delta);
+			trep=1000000*delta.tv_sec+delta.tv_usec;
+			//Putting together the pieces
+			for(i=0;i<ret;i++) {
+				reply[M+i]=part[i];
+				if(part[i]=='\n') j=0; //end of message
+			}
+			M+=ret;
+			if(j==0) {reply[M-1]='\0'; break;} //Message concluded (trim newline)
+			if(trep>=LTIME*1000) break; //TIMEOUT
+			usleep(((int)((trep+1500)/1000))*1000-trep); //Sleep the time needed to keep a 1ms interval between two read calls
+		}
+		//Bad communication
+		if(err==-10) break;
+		if(j) err=-1; //If j!=0 message is not concluded
+		
+		if(!err) {
+			//Good reply
+			if(verb) printf(BLU "[ reply ]" NRM " %s in %4d ms\n",reply,(trep+500)/1000);
+			break;
+		}
+		switch(err) {
+			case -1:
+				if(verb) printf(YEL "[timeout]" NRM " %s\n",query);
+				break;
+			case -3:
+				if(verb) printf(MAG "[INC.REP]" NRM " %s\n",reply);
+				usleep(LTIME*1000);
+				break;
+			default:
+				if(verb) printf(RED "[ ERROR ]" NRM" %s\n",reply);
+				break;
+		}
+		tcflush(sockfd,TCIOFLUSH);
+	}
+	if(err==-10) {
+		fSockOK=false;
+		close(sockfd);
+		printf(RED "KSend   " NRM " socket died\n");
+		return err;
+	}
+	tcflush(sockfd,TCIOFLUSH);
+	return err;
 }
 
 bool FzSC::SockOK() {

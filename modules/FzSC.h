@@ -37,19 +37,20 @@
 class FzSC {
 public:
 	//Using UDP protocol by default. With serial=1 RS232 protocol is used instead (set target=<device>, e.g. "/dev/ttyUSB0")
-	FzSC(const bool serial=false, const char *target=RBNAME);
+	FzSC(const bool serial=false, const char *target=RBNAME,const bool keithley=false);
 	~FzSC();
 	
 	int Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb=0);
 	int Meter(double *time,double *trig,int *bitmask);
+	int KSend(const char *data,char *reply,int verb=0);
 	bool SockOK();
 private:
 	void crc2ascii(const uint8_t crc, uint8_t *buffer);
 	int SCParse(char *,const uint8_t *,const int);
-	int TTYOpen(const char *);
+	int TTYOpen(const char *, speed_t speed);
 	int UDPOpen(const char *);
 	
-	bool fSockOK,fSerial;
+	bool fSockOK,fSerial,fKeith;
 	
 	int sockfd;
 	struct sockaddr src;

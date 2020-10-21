@@ -59,6 +59,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	
+	//Open FEE or RB
+	FzSC sock(serial,serial?device:hname);
+	if(!(sock.SockOK())) return 0;
+	
 	//Open Keithley
 	FzSC *ksock=nullptr;
 	if(keith) {
@@ -68,10 +72,6 @@ int main(int argc, char *argv[]) {
 			ksock=nullptr;
 		}
 	}
-	
-	//Open FEE or RB
-	FzSC sock(serial,serial?device:hname);
-	if(!(sock.SockOK())) return 0;
 	
 	FzTest test(&sock,blk,fee,verb);
 	if(ksock!=nullptr) test.KeithleySetup(ksock);
@@ -84,8 +84,6 @@ int main(int argc, char *argv[]) {
 	else {
 		if((ret=test.Manual())<0) goto err;
 	}
-	
-	if(ksock!=nullptr) delete ksock;
 	return 0;
 	
 	err:
@@ -97,6 +95,5 @@ int main(int argc, char *argv[]) {
 		case -20: printf(RED "fz-test " NRM "anomalous SC replies (check the software and/or the firmware)\n"); break;
 		default: printf(RED "fz-test " NRM "unhandled error...\n");
 	}
-	if(ksock!=nullptr) delete ksock;
 	return -1;
 }

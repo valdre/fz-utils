@@ -9,18 +9,43 @@ FzTest::FzTest(FzSC *sck, const int Blk, const int Fee, const bool verbose) {
 }
 
 FzTest::~FzTest() {
-	
+	if(ksock!=nullptr) delete ksock;
 }
 
+//Keithley functions
 void FzTest::KeithleySetup(FzSC *sck) {
+	int ret;
+	char reply[MLENG];
+	
 	ksock=sck;
 	if(sck==nullptr) return;
 	
-	char reply[MLENG];
-	//test
-	ksock->KSend("*IDN?",reply,true);
+	//Reset Keithley
+	if((ret=ksock->KSend("*RST",nullptr,false))<0) goto err;
 	
+	//Check if Keithley answers correctly
+	if((ret=ksock->KSend("*IDN",reply,false))<0) goto err;
+	if(strncmp(reply,"KEITHLEY INSTRUMENTS INC.",25)) goto err;
+	
+	//Settings for HV measuring
+	if((ret=ksock->KSend("volt:dc:rang max",nullptr,false))<0) goto err;
+	if((ret=ksock->KSend(":Sens:Func 'volt:dc'",nullptr,false))<0) goto err;
 	return;
+	
+	err:
+	delete ksock;
+	ksock=nullptr;
+	return;
+}
+
+float FzTest::GetVoltage() {
+	int ret;
+	char reply[MLENG];
+	double V;
+	
+	if((ret=ksock->KSend(":read?",reply,false))<0) return (double)ret;
+	if(sscanf(reply,"%lg",&V)<1) return -20.;
+	return fabs(V);
 }
 
 void FzTest::Init() {
@@ -804,8 +829,8 @@ int FzTest::ApplyHV(int c,int V) {
 
 int FzTest::HVtest() {
 	int c,ret,max,V,I;
-	char ctmp,query[SLENG];
 	double R;
+	char ctmp,query[SLENG];
 	uint8_t reply[MLENG];
 	const int bit[5]={1,2,2,4,8};
 	const int maxv3[5]={200,350,200,200,350};
@@ -858,7 +883,7 @@ int FzTest::HVtest() {
 		else {
 			R=atof(query);
 			if(R<0 || R>200) {
-				printf(YEL "OffCal  " NRM " invalid target. Skipping current check.\n");
+				printf(YEL "OffCal  " NRM " invalid value. Skipping current check.\n");
 				continue;
 			}
 		}
@@ -876,4 +901,41 @@ int FzTest::HVtest() {
 		ApplyHV(c,0);
 	}
 	return ret;
+}
+
+int FzTest::ReadCell(int add) {
+	int ret,cont;
+	char query[SLENG];
+	uint8_t reply[MLENG];
+	
+	if(add<0 || add>1023) {
+		printf(RED "ReadCell" NRM " invalid address (%d)\n",add);
+		return -20;
+	}
+	sprintf(query,"%d",add);
+	if((ret=sock->Send(blk,fee,0x90,query,reply,fVerb))<0) return ret;
+	if(sscanf((char *)reply,"content : %d",&cont)<1) {
+		printf(RED "ReadCell" NRM " bad reply (%s)\n", reply);
+		return -20;
+	}
+	return cont;
+}
+
+int FzTest::WriteCell(int add,int cont) {
+	int ret;
+	char query[SLENG];
+	uint8_t reply[MLENG];
+	
+	if(add<0 || add>1023) {
+		printf(RED "WriteCel" NRM " invalid address (%d)\n",add);
+		return -20;
+	}
+	if(cont<0 || cont>255) {
+		printf(RED "WriteCel" NRM " invalid content (%d)\n",cont);
+		return -20;
+	}
+	sprintf(query,"%d,%d",add,cont);
+	if((ret=sock->Send(blk,fee,0x95,query,reply,fVerb))<0) return ret;
+	
+	return cont;
 }

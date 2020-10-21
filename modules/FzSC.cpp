@@ -1,30 +1,32 @@
 #include "FzSC.h"
 
 FzSC::FzSC(const bool serial, const char *target, const bool keithley) {
+	fSockOK=false;
 	if(keithley) {
+		//Serial communication with Keithley 2000 multimeter
 		fKeith=true;
 		if(serial) {
 			fSerial=true;
-			if(TTYOpen(target, B19200)<0) fSockOK=false;
-			else fSockOK=true;
+			if(TTYOpen(target, B19200)>=0) fSockOK=true;
 		}
 		else {
-			fSerial=0;
-			fSockOK=false;
+			fSerial=false;
+			printf(RED "FzSC    " NRM " Keithley only supports serial connection\n");
 		}
 	}
 	else if(serial) {
+		//Serial communication with FEE (via ERNI connector or block card)
 		fKeith=false;
 		fSerial=true;
-		if(TTYOpen(target, B115200)<0) fSockOK=false;
-		else fSockOK=true;
+		if(TTYOpen(target, B115200)>=0) fSockOK=true;
 	}
 	else {
+		//UDP communication with FEE/BC/RB (via RB)
 		fKeith=false;
 		fSerial=true;
-		if(UDPOpen(target)<0) fSockOK=false;
-		else fSockOK=true;
+		if(UDPOpen(target)>=0) fSockOK=true;
 	}
+	if(!fSockOK) printf(RED "FzSC    " NRM " Socket or TTY opening failed\n");
 }
 
 FzSC::~FzSC() {
@@ -39,6 +41,7 @@ void FzSC::crc2ascii(uint8_t crc, uint8_t *buffer) {
 	buffer[1]=(uint8_t)(str[1]);
 	return;
 }
+
 //Function used to read SC messages and print them in human readable format
 int FzSC::SCParse(char *sout,const uint8_t *buffer,const int N) {
 	int i;

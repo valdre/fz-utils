@@ -55,6 +55,7 @@ public:
 	
 private:
 	void Init();
+	float GetVoltage();
 	int SetSN(const int sn);
 	int BLmeas(const int ch,const int tries,int *Bl,int *Blvar);
 	int OffCheck(const int ch);
@@ -64,6 +65,8 @@ private:
 	int IVmeas(int c,int *V,int *I,bool wait=true);
 	int ApplyHV(int c,int V);
 	int HVtest();
+	int ReadCell(int add);
+	int WriteCell(int add,int cont);
 	
 	bool fTested,fVerb;
 	FzSC *sock,*ksock;

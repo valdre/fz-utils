@@ -429,7 +429,7 @@ int FzSC::KSend(const char *data,char *reply,int verb/*=0*/) {
 			//Putting together the pieces
 			for(i=0;i<ret;i++) {
 				reply[M+i]=part[i];
-				if(part[i]=='\n') j=0; //end of message
+				if((part[i]==0x0a)||(part[i]==0x0d)) j=0; //end of message
 			}
 			M+=ret;
 			if(j==0) {reply[M-1]='\0'; break;} //Message concluded (trim newline)
@@ -447,7 +447,7 @@ int FzSC::KSend(const char *data,char *reply,int verb/*=0*/) {
 		}
 		switch(err) {
 			case -1:
-				if(verb) printf(YEL "[timeout]" NRM " %s\n",query);
+				if(verb) printf(YEL "[timeout]" NRM " %s",query);
 				break;
 			case -3:
 				if(verb) printf(MAG "[INC.REP]" NRM " %s\n",reply);

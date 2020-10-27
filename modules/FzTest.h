@@ -11,6 +11,11 @@
 #define LASTVFPGA  "19/09/2019"
 //HV ramp (in V/s)
 #define HVRAMP 20
+//DAC units per Volt (typical value)
+#define DACVSI1 140
+#define DACVSI2  85
+//Select byte
+#define SELBYTE(X,I) (((unsigned long int)X>>(8*I))&0xFF)
 
 //Constants
 static const char lFPGA[2][2]={"A","B"};
@@ -26,7 +31,8 @@ static const float blref3[6]={-7400,-5650,-4500,-7400,-5650,-7400};
 static const float blref5[6]={-7400,-5100,-6150,-7400,-4250,-7400};
 static const float bltoll[6]={ 0.02,  0.1,  0.1, 0.02,  0.1, 0.02};
 static const float blvtol[6]={   20,  200,  200,   20,  200,   20};
-static const char hvissues[4][15]={"V mismatch","Wrong I offset","I mismatch","Unstable HV"};
+static const int maxhv3[5]={200,350,200,200,350};
+static const int maxhv4[5]={300,400,300,300,400};
 
 //Fails:
 //	   1 -> Overheat		=> check cooling
@@ -55,27 +61,31 @@ public:
 	
 private:
 	void Init();
-	float GetVoltage();
+	int GetVoltage(double *V, double *Vvar, const bool wait=true);
 	int SetSN(const int sn);
 	int BLmeas(const int ch,const int tries,int *Bl,int *Blvar);
 	int OffCheck(const int ch);
 	int OffCal();
 	int OffCurve();
-	int WaitHVready(int c);
-	int IVmeas(int c,int *V,int *I,bool wait=true);
-	int ApplyHV(int c,int V);
+	int WaitHVready(const int c);
+	int IVmeas(const int c,int *V,int *Vvar,int *I,bool wait=true);
+	int ApplyHV(const int c,const int V);
 	int HVtest();
-	int ReadCell(int add);
-	int WriteCell(int add,int cont);
+	int HVcalib();
+	int HVcalChan(const int c,const int max,const bool dac);
+	int LinReg(const int n,const double *x,const double *y,double *p1,double *p0);
+	int SetDAC(const int c, const int vset, int vprev=-1);
+	int IVADC(const int c,double *V,int *Vvar,double *I);
+	int ReadCell(const int add);
+	int WriteCell(const int add,const int cont);
 	
 	bool fTested,fVerb;
 	FzSC *sock,*ksock;
 	int blk,fee;
-	int hvstat[5];
 	int failmask;
 	
 	//FEE data
-	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],hvmask,dcreact[12];
+	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],hvmask,dcreact[12],V20[5],V20var[5],Vfull[5],Vfullvar[5],Ifull[5],I1000[5];
 	char vPIC[11],vFPGA[2][11];
 };
 

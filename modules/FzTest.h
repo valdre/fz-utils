@@ -27,12 +27,15 @@ static const char regDAC[3][7]={"0x0004","0x005","0x006"};
 static const char lvlabel[19][50]={Mag "      VP5REFA - M121" NRM,Mag "      VP5REFB - M54 " NRM,Mag "         VM27 - M78 " NRM,Cya "       VM2A1A - M92 " NRM,Cya "       VM2A2A - M114" NRM,Cya "       VM2A1B - M37 " NRM,Cya "       VM2A2B - M109" NRM,Blu "         VP37 - M33 " NRM,Cya "       VP3A1A - M104" NRM,Cya "       VP3A2A - M116" NRM,Cya "       VP3A1B - M47 " NRM,Cya "       VP3A2B - M111" NRM,Blu "        VP33A - M89 " NRM,Blu "        VP33D - M85 " NRM,Blu "         VP25 - M3  " NRM,Blu "          VP1 - M119" NRM,Blu "        VP18A - M103" NRM,Blu "        VP18B - M118" NRM,Blu "        VP18D - M90 " NRM};
 static const float vref[19]={5000,5000,2500,2000,2000,2000,2000,3700,3000,3000,3000,3000,3300,3300,2500,1000,1800,1800,1800};
 static const char lvnotes[19][15]={"From VP12_0","From VP12_0","From VP5_5_IN","From VM27","From VM27","From VM27","From VM27","From VP5_5_IN","From VP37","From VP37","From VP37","From VP37","From VP37","From VP37","From VP5_5_IN","From VP25","From VP25","From VP25","From VP25"};
+//Offset constants
 static const float blref3[6]={-7400,-5650,-4500,-7400,-5650,-7400};
 static const float blref5[6]={-7400,-5100,-6150,-7400,-4250,-7400};
 static const float bltoll[6]={ 0.02,  0.1,  0.1, 0.02,  0.1, 0.02};
 static const float blvtol[6]={   20,  200,  200,   20,  200,   20};
-static const int maxhv3[5]={200,350,200,200,350};
-static const int maxhv4[5]={300,400,300,300,400};
+//HV constants:               Si1A    Si2A     N/A    Si1B    Si2B
+static const int maxhv3[5]={    200,    350,    200,    200,    350};
+static const int maxhv4[5]={    300,    400,    300,    300,    400};
+static const int    V2D[5]={DACVSI1,DACVSI2,DACVSI2,DACVSI1,DACVSI2};
 
 //Fails:
 //	   1 -> Overheat		=> check cooling
@@ -63,19 +66,20 @@ private:
 	void Init();
 	int GetVoltage(double *V, double *Vvar, const bool wait=true);
 	int SetSN(const int sn);
-	int BLmeas(const int ch,const int tries,int *Bl,int *Blvar);
 	int OffCheck(const int ch);
 	int OffCal();
 	int OffCurve();
-	int WaitHVready(const int c);
-	int IVmeas(const int c,int *V,int *Vvar,int *I,bool wait=true);
-	int ApplyHV(const int c,const int V);
+	int BLmeas(const int ch,const int tries,int *Bl,int *Blvar);
+	
 	int HVtest();
 	int HVcalib();
 	int HVcalChan(const int c,const int max,const bool dac);
+	int ApplyHV(const int c,const int V);
+	int IVmeas(const int c,int *V,int *Vvar,int *I,bool wait=true);
+	int IVADC(const int c,double *V,int *Vvar,double *I);
 	int LinReg(const int n,const double *x,const double *y,double *p1,double *p0);
 	int SetDAC(const int c, const int vset, int vprev=-1);
-	int IVADC(const int c,double *V,int *Vvar,double *I);
+	
 	int ReadCell(const int add);
 	int WriteCell(const int add,const int cont);
 	

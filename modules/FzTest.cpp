@@ -25,7 +25,7 @@ void FzTest::Init() {
 	gomask=0;
 	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000; dcreact[c]=1000;}
 	hvmask=-1;
-	for(c=0;c<5;c++) {V20[c]=-1; V20var[c]=-1; Vfull[c]=-1; Vfullvar[c]=-1; Ifull[c]=-1; I1000[c]=-1;}
+	for(c=0;c<4;c++) {V20[c]=-1; V20var[c]=-1; Vfull[c]=-1; Vfullvar[c]=-1; Ifull[c]=-1; I1000[c]=-1;}
 	failmask=0;
 	return;
 }
@@ -109,8 +109,7 @@ int FzTest::FastTest(bool hv) {
 	int c,N,ret;
 	char query[SLENG];
 	uint8_t reply[MLENG];
-	int itmp[8];
-	float ftmp[3];
+	int itmp[3];
 	
 	if(!fVerb) printf(BLD "FastTest" NRM " initializing parameters\n");
 	Init();
@@ -145,32 +144,10 @@ int FzTest::FastTest(bool hv) {
 	if(N<6) return -20;
 	if(!fVerb) printf(UP GRN "FastTest" NRM " getting temperatures\n");
 	
-	//Get Low Voltages
-	if(!fVerb) printf(BLD "FastTest" NRM " getting low voltages\n");
-	if((ret=sock->Send(blk,fee,0x9B,"",reply,fVerb))) return ret;
-	for(c=0;reply[c];c++) if(reply[c]==0x2c) reply[c]=0x2e; // ',' -> '.' (sscanf doesn't accept ',' as decimal separator)
-	N=sscanf((char *)reply,"0|v:%f %f %f",ftmp,ftmp+1,ftmp+2);
-	if(N!=3) return -20;
-	for(c=0;c<3;c++) lv[c]=(int)(ftmp[c]*1000+0.5);
-	if((ret=sock->Send(blk,fee,0x9C,"",reply,fVerb))) return ret;
-	N=sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d,%d,%d",itmp,itmp+1,itmp+2,itmp+3,itmp+4,itmp+5,itmp+6,itmp+7);
-	if(N==8) {
-		v4=1;
-		lv[4] =itmp[0]; lv[9] =itmp[1]; lv[6] =itmp[2]; lv[11]=itmp[3];
-		lv[3] =itmp[4]; lv[8] =itmp[5]; lv[5] =itmp[6]; lv[10]=itmp[7];
-	}
-	else if(N==4) {
-		v4=0;
-		lv[9] =itmp[0]; lv[11]=itmp[1]; lv[8] =itmp[2]; lv[10]=itmp[3];
-		lv[3]=lv[4]=lv[5]=lv[6]=-2;
-	}
-	else return -20;
-	if((ret=sock->Send(blk,fee,0x9D,"",reply,fVerb))) return ret;
-	N=sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d,%d,%d",itmp,itmp+1,itmp+2,itmp+3,itmp+4,itmp+5,itmp+6,itmp+7);
-	if(N!=8) return -20;
-	lv[15]=itmp[0]; lv[16]=itmp[1]; lv[14]=itmp[2]; lv[13]=itmp[3];
-	lv[18]=itmp[4]; lv[17]=itmp[5]; lv[12]=itmp[6]; lv[7] =itmp[7];
-	if(!fVerb) printf(UP GRN "FastTest" NRM " getting low voltages\n");
+	//Get LV values and HV calibration status
+	if(!fVerb) printf(BLD "FastTest" NRM " getting low voltages, card version and HV calibration status\n");
+	if((ret=LVHVtest())<0) return ret;
+	if(!fVerb) printf(UP GRN "FastTest" NRM " getting low voltages, card version and HV calibration status\n");
 	
 	//Test pre-amp
 	if(!fVerb) printf(BLD "FastTest" NRM " testing pre-amplifiers (Go/NOGo)\n");
@@ -190,34 +167,13 @@ int FzTest::FastTest(bool hv) {
 	}
 	if(!fVerb) printf(UP GRN "FastTest" NRM " testing baseline offsets\n");
 	
-	//HV calibration status
-	if(!fVerb) printf(BLD "FastTest" NRM " checking HV calibration status\n");
-	if((ret=sock->Send(blk,fee,0x94,"",reply,fVerb))) return ret;
-	ret=strlen((char *)reply);
-	if((ret>=3)&&(reply[2]>=0x30)&&(reply[2]<=0x39)) {
-		N=reply[2]-0x30;
-		if((N<=4)&&(ret==3+3*N)) {
-			hvmask=0;
-			for(c=0;c<N;c++) {
-				if(reply[4+3*c]==0x41 && reply[5+3*c]==0x31) hvmask|=1;
-				else if(reply[4+3*c]==0x41 && reply[5+3*c]==0x32) hvmask|=2;
-				else if(reply[4+3*c]==0x42 && reply[5+3*c]==0x31) hvmask|=4;
-				else if(reply[4+3*c]==0x42 && reply[5+3*c]==0x32) hvmask|=8;
-				else {
-					hvmask=-1; break;
-				}
-			}
-		}
-	}
-	if(!fVerb) printf(UP GRN "FastTest" NRM " checking HV calibration status\n");
+	fTested=true;
 	
 	//HV test (no calibration)
 	if(hv) {
 		if(!fVerb) printf(BLD "FastTest" NRM " testing HV quality\n");
 		if((ret=HVtest())<0) return ret;
 	}
-	
-	fTested=true;
 	return 0;
 }
 
@@ -376,11 +332,10 @@ void FzTest::Report() {
 		}
 		printf("\n");
 	}
-	for(c=0;c<5;c++) {
-		if(c==2) continue;
+	for(c=0;c<4;c++) {
 		if(V20[c]<0 || V20var[c]<0) {hvt=false; continue;}
 		
-		printf(" %3s-%1s        (20 V) ",lChan[c%3],lFPGA[c/3]);
+		printf(" %3s-%1s        (20 V) ",lChan[c%2],lFPGA[c/2]);
 		if(abs(V20[c]-20)>1 || V20var[c]>5) printf(RED "Fail" NRM);
 		else printf(GRN "Pass" NRM);
 		printf(" % 20d         20",V20[c]);
@@ -395,9 +350,9 @@ void FzTest::Report() {
 		}
 		printf("\n");
 		
-		int max=v4?maxhv4[c]:maxhv3[c];
+		int max=v4?maxhv4[c%2]:maxhv3[c%2];
 		if(Vfull[c]<0 || Vfullvar[c]<0) continue;
-		printf(" %3s-%1s        (Vmax) ",lChan[c%3],lFPGA[c/3]);
+		printf(" %3s-%1s        (Vmax) ",lChan[c%2],lFPGA[c/2]);
 		if(abs(Vfull[c]-max)>1 || Vfullvar[c]>5) printf(RED "Fail" NRM);
 		else printf(GRN "Pass" NRM);
 		printf(" % 20d        %3d",Vfull[c],max);
@@ -413,7 +368,7 @@ void FzTest::Report() {
 		printf("\n");
 		
 		if(Ifull[c]<0) continue;
-		printf(" %3s-%1s (Ioff @ Vmax) ",lChan[c%3],lFPGA[c/3]);
+		printf(" %3s-%1s (Ioff @ Vmax) ",lChan[c%2],lFPGA[c/2]);
 		if(Ifull[c]>100) printf(RED "Fail" NRM);
 		else printf(GRN "Pass" NRM);
 		printf(" % 20d       <100",Ifull[c]);
@@ -424,7 +379,7 @@ void FzTest::Report() {
 		printf("\n");
 		
 		if(I1000[c]<0) continue;
-		printf(" %3s-%1s (Iref=1000nA) ",lChan[c%3],lFPGA[c/3]);
+		printf(" %3s-%1s (Iref=1000nA) ",lChan[c%2],lFPGA[c/2]);
 		if(abs(I1000[c]-1000)>100) printf(RED "Fail" NRM);
 		else printf(GRN "Pass" NRM);
 		printf(" % 20d       1000",I1000[c]);
@@ -593,10 +548,12 @@ int FzTest::Manual() {
 		printf("    2) Offset auto-calibration\n");
 		printf("    3) Plot offset calibration curve\n");
 		printf("    4) HV calibration\n");
-		printf("    5) Import EEPROM data\n");
-		printf("    6) Export EEPROM data\n");
-		printf("    8) Repeat the fast test\n");
-		printf("    9) Repeat the fast test with HV check\n");
+		printf("    5) Import EEPROM data from DB\n");
+		if(sn>0 && sn<255) printf("    6) Update DB\n");
+		if(fTested) printf("    8) Repeat the fast test\n");
+		else printf("    8) Perform the fast test\n");
+		if(fTested) printf("    9) Repeat the fast test with HV check\n");
+		else printf("    9) Perform the fast test with HV check\n");
 		printf("    0) Quit\n\n");
 		printf("> "); scanf("%d",&tmp); getchar();
 		if((tmp>9)||(tmp<0)) tmp=0;
@@ -821,7 +778,7 @@ int FzTest::OffCurve() {
 
 //BL offset measurement
 int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
-	int ret=0,N=0,tmp,min=9999,max=-9999;
+	int ret,N=0,tmp,min=9999,max=-9999;
 	double av=0;
 	char query[SLENG];
 	uint8_t reply[MLENG];
@@ -847,6 +804,58 @@ int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
 	return -20;
 }
 
+//Fast LV and HV checks
+int FzTest::LVHVtest() {
+	int c,N,ret,itmp[8];
+	uint8_t reply[MLENG];
+	float ftmp[3];
+	
+	//Get LV values and card version
+	if((ret=sock->Send(blk,fee,0x9B,"",reply,fVerb))) return ret;
+	for(c=0;reply[c];c++) if(reply[c]==0x2c) reply[c]=0x2e; // ',' -> '.' (sscanf doesn't accept ',' as decimal separator)
+	N=sscanf((char *)reply,"0|v:%f %f %f",ftmp,ftmp+1,ftmp+2);
+	if(N!=3) return -20;
+	for(c=0;c<3;c++) lv[c]=(int)(ftmp[c]*1000+0.5);
+	if((ret=sock->Send(blk,fee,0x9C,"",reply,fVerb))) return ret;
+	N=sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d,%d,%d",itmp,itmp+1,itmp+2,itmp+3,itmp+4,itmp+5,itmp+6,itmp+7);
+	if(N==8) {
+		v4=1;
+		lv[4] =itmp[0]; lv[9] =itmp[1]; lv[6] =itmp[2]; lv[11]=itmp[3];
+		lv[3] =itmp[4]; lv[8] =itmp[5]; lv[5] =itmp[6]; lv[10]=itmp[7];
+	}
+	else if(N==4) {
+		v4=0;
+		lv[9] =itmp[0]; lv[11]=itmp[1]; lv[8] =itmp[2]; lv[10]=itmp[3];
+		lv[3]=lv[4]=lv[5]=lv[6]=-2;
+	}
+	else return -20;
+	if((ret=sock->Send(blk,fee,0x9D,"",reply,fVerb))) return ret;
+	N=sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d,%d,%d",itmp,itmp+1,itmp+2,itmp+3,itmp+4,itmp+5,itmp+6,itmp+7);
+	if(N!=8) return -20;
+	lv[15]=itmp[0]; lv[16]=itmp[1]; lv[14]=itmp[2]; lv[13]=itmp[3];
+	lv[18]=itmp[4]; lv[17]=itmp[5]; lv[12]=itmp[6]; lv[7] =itmp[7];
+	
+	//HV calibration status
+	if((ret=sock->Send(blk,fee,0x94,"",reply,fVerb))) return ret;
+	ret=strlen((char *)reply);
+	if((ret>=3)&&(reply[2]>=0x30)&&(reply[2]<=0x39)) {
+		N=reply[2]-0x30;
+		if((N<=4)&&(ret==3+3*N)) {
+			hvmask=0;
+			for(c=0;c<N;c++) {
+				if(reply[4+3*c]==0x41 && reply[5+3*c]==0x31) hvmask|=1;
+				else if(reply[4+3*c]==0x41 && reply[5+3*c]==0x32) hvmask|=2;
+				else if(reply[4+3*c]==0x42 && reply[5+3*c]==0x31) hvmask|=4;
+				else if(reply[4+3*c]==0x42 && reply[5+3*c]==0x32) hvmask|=8;
+				else {
+					hvmask=-1; break;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
 //HV functions
 //HV extended test
 int FzTest::HVtest() {
@@ -854,15 +863,16 @@ int FzTest::HVtest() {
 	double R;
 	char query[SLENG];
 	uint8_t reply[MLENG];
-	const int bit[5]={1,2,2,4,8};
 	
-	for(c=0;c<5;c++) {
-		if(c==2) continue; //Skip CsI channels
-		if((hvmask&(bit[c]))==0) {
-			printf(YEL "HVtest  " Mag " %s-%s" NRM " not calibrated\n",lChan[c%3],lFPGA[c/3]);
+	if(!fTested) printf(YEL "HVtest  " NRM " fast test was not performed. Performing HV check only...\n");
+	if((ret=LVHVtest())<0) return ret;
+	
+	for(c=0;c<4;c++) {
+		if((hvmask&(1<<c))==0) {
+			printf(YEL "HVtest  " Mag " %s-%s" NRM " not calibrated\n",lChan[c%2],lFPGA[c/2]);
 			continue;
 		}
-		printf("Ready to test" Mag " %s-%s " NRM "HV channel. What do you want to do?\n",lChan[c%3],lFPGA[c/3]);
+		printf("Ready to test" Mag " %s-%s " NRM "HV channel. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
 		printf("    1) Go on (HV will be applied)!\n");
 		printf("    2) Skip this channel\n");
 		printf("    0) Stop the HV test\n\n");
@@ -872,8 +882,8 @@ int FzTest::HVtest() {
 		if(ret==0) break;
 		
 		//Set max voltage
-		max=v4?maxhv4[c]:maxhv3[c];
-		sprintf(query,"%s,%d,%d",lFPGA[c/3],c%3+1,max);
+		max=v4?maxhv4[c%2]:maxhv3[c%2];
+		sprintf(query,"%s,%d,%d",lFPGA[c/2],c%2+1,max);
 		if((ret=sock->Send(blk,fee,0x92,query,reply,fVerb))) goto err;
 		//Apply 20V to start (if HV is unstable it is unsafe to go further)
 		if((ret=ApplyHV(c,20))<0) goto err;
@@ -894,7 +904,7 @@ int FzTest::HVtest() {
 		if(abs(V-max)>20 || Vvar>5) continue;
 		
 		//Test current
-		printf("Ready to check" Mag " %s-%s " NRM "I measurement. What do you want to do?\n",lChan[c%3],lFPGA[c/3]);
+		printf("Ready to check" Mag " %s-%s " NRM "I measurement. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
 		printf("  pos) Plug the load and type its res. in MOhm\n");
 		printf("  neg) Skip the I measurement\n\n");
 		printf("> "); scanf("%lf",&R); getchar();
@@ -912,10 +922,7 @@ int FzTest::HVtest() {
 	return 0;
 	err:
 	//forcing return to 0V to all channels
-	for(c=0;c<5;c++) {
-		if(c==2) continue; //Skip CsI channels
-		ApplyHV(c,0);
-	}
+	for(c=0;c<4;c++) ApplyHV(c,0);
 	return ret;
 }
 
@@ -924,39 +931,40 @@ int FzTest::HVcalib() {
 	int c,ret,max;
 	char query[SLENG];
 	uint8_t reply[MLENG];
-	const int bit[5]={1,2,2,4,8};
 	bool dac=false;
 	
-	for(c=0;c<5;c++) {
-		if(c==2) continue; //Skip CsI channels
-		if(hvmask&(bit[c])) printf("\n %s-%s" NRM " is already calibrated. What do you want to do?\n",lChan[c%3],lFPGA[c/3]);
-		else printf("Ready to calibrate" Mag " %s-%s " NRM "HV channel. What do you want to do?\n",lChan[c%3],lFPGA[c/3]);
+	if(!fTested) printf(YEL "HVcalib " NRM " fast test was not performed. Performing HV check only...\n");
+	if((ret=LVHVtest())<0) return ret;
+	
+	for(c=0;c<4;c++) {
+		if(hvmask&(1<<c)) printf("\n %s-%s" NRM " is already calibrated. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
+		else printf("Ready to calibrate" Mag " %s-%s " NRM "HV channel. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
 		printf("    1) Go on (HV will be applied, Keithley probe must be soldered before going on)!\n");
-		if(hvmask&(bit[c])) printf("    2) Calibrate ADC only (HV will be applied, but Keithley is not needed)\n");
+		if(hvmask&(1<<c)) printf("    2) Calibrate ADC only (HV will be applied, but Keithley is not needed)\n");
 		printf("    3) Skip this channel\n");
 		printf("    0) Quit the HV calibration procedure\n\n");
 		printf("> "); scanf("%d",&ret); getchar();
 		if(ret<0||ret>3) ret=0;
 		if(ret==3) continue;
 		if(ret==0) break;
-		if(ret==2 && (hvmask&(bit[c]))==0) {
-			printf(YEL "HVtest  " NRM "Unable to calibate ADC only (DAC must be calibrated first!)\n");
+		if(ret==2 && (hvmask&(1<<c))==0) {
+			printf(YEL "HVcalib " NRM "Unable to calibate ADC only (DAC must be calibrated first!)\n");
 			ret=1;
 		}
 		if(ret==1 && ksock==nullptr) {
-			printf(RED "HVtest  " NRM " Keithley 2000 is not connected or configured\n");
+			printf(RED "HVcalib " NRM " Keithley 2000 is not connected or configured\n");
 			break;
 		}
 		if(ret==1) dac=true;
 		
 		//Set max voltage
-		max=v4?maxhv4[c]:maxhv3[c];
-		sprintf(query,"%s,%d,%d",lFPGA[c/3],c%3+1,max);
+		max=v4?maxhv4[c%2]:maxhv3[c%2];
+		sprintf(query,"%s,%d,%d",lFPGA[c/2],c%2+1,max);
 		if((ret=sock->Send(blk,fee,0x92,query,reply,fVerb))) return ret;
 		
 		//Enable HV (v4/5 only)
 		if(v4) {
-			sprintf(query,"%s,1",lFPGA[c/3]);
+			sprintf(query,"%s,1",lFPGA[c/2]);
 			if((ret=sock->Send(blk,fee,0xA6,query,reply,fVerb))) return ret;
 		}
 		
@@ -971,9 +979,7 @@ int FzTest::HVcalib() {
 int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	int N,i,ret,Vtarg,Vvar,maxvar,dau,oldau=-1,dacadr,isamadr;
 	double VK,VKvar,Vadc[50],Iadc[50],lastV[2]={0,0},lastD[2]={0,0},bakV,bakD;
-	int V2D=((c==0)||(c==3))?DACVSI1:DACVSI2;
-	const int cdisc[5]={0,2,2,1,3};
-	const int call[5] ={0,1,1,2,3};
+	const int cdisc[4]={0,2,1,3};
 	
 	switch(c) {
 		case 0:  dacadr=82;         isamadr=376; break;
@@ -984,15 +990,16 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	}
 	
 	//Setting channel as NOT calibrated
-	if((ret=WriteCell(78+cdisc[c],1))<0) return ret;
-	if((ret=WriteCell(50+call[c],0))<0) return ret;
+	if((ret=WriteCell(78+cdisc[c],255))<0) return ret;
+	if((ret=WriteCell(50+c,255))<0) return ret;
+	hvmask&=(~(1<<c));
 	
 	//Before starting: force 0V to DAC output, wait 2s and check Keithley
 	if((ret=SetDAC(c,0))<0) return ret;
 	sleep(2);
 	if((ret=GetVoltage(&VK,nullptr,false)<0)) return ret;
 	if(VK>=5) {
-		printf(YEL "HVcalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,VK,lChan[c%3],lFPGA[c/3]);
+		printf(YEL "HVcalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,VK,lChan[c%2],lFPGA[c/2]);
 		goto bad;
 	}
 	
@@ -1014,7 +1021,7 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 			for(i=0;i<20;i++) {
 				//First point: guess
 				if(fabs(lastV[1]-lastV[0])<0.001) {
-					dau=V2D*Vtarg;
+					dau=V2D[c%2]*Vtarg;
 					if(i==0) printf(CYA "HVcalib " NRM " guessing first DAC value...\n");
 				}
 				//Then: linear extrapolation
@@ -1034,7 +1041,7 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 					printf(YEL "HVcalib " NRM " unexpected HV meas.: Vtarg=%d, VK=%.3f, DVK=%.3f\n",Vtarg,VK,VKvar);
 					goto bad;
 				}
-				printf(CYA "HVcalib " Mag " %s-%s " NRM "       DAC set to %5d => VK = " BLD "%7.3f\n" NRM,lChan[c%3],lFPGA[c/3],dau,VK);
+				printf(CYA "HVcalib " Mag " %s-%s " NRM "       DAC set to %5d => VK = " BLD "%7.3f\n" NRM,lChan[c%2],lFPGA[c/2],dau,VK);
 				
 				lastV[0]=lastV[1]; lastD[0]=lastD[1];
 				lastV[1]=VK;       lastD[1]=(double)dau;
@@ -1092,7 +1099,7 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 		}
 	}
 	else {
-		if((c%3)==0) {
+		if((c%2)==0) {
 			cAV = (long int)(-p1*1.e8);
 			cBV = (long int)(p0*1.e8);
 		}
@@ -1125,20 +1132,21 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	printf(GRN "HVcalib " NRM " V coeff: A =% 12ld, B =% 12ld\n",cAV,sgV?cBV:-cBV);
 	printf(GRN "HVcalib " NRM " I coeff: A =%12lu, B =% 12ld\n",cAI,sgI?cBI:-cBI);
 	
-	for(i=0;i<2;i++) if((ret=WriteCell(54+call[c]*6+i,SELBYTE(cAV,i)))<0) return ret;
+	for(i=0;i<2;i++) if((ret=WriteCell(54+c*6+i,SELBYTE(cAV,i)))<0) return ret;
 	for(i=0;i<4;i++) {
 		if(v4&&i==3) {
-			if((ret=WriteCell(59+call[c]*6,sgV))<0) return ret;
+			if((ret=WriteCell(59+c*6,sgV))<0) return ret;
 			break;
 		}
-		if((ret=WriteCell(56+call[c]*6+i,SELBYTE(cBV,i)))<0) return ret;
+		if((ret=WriteCell(56+c*6+i,SELBYTE(cBV,i)))<0) return ret;
 	}
-	for(i=0;i<4;i++) if((ret=WriteCell(13+call[c]*9+i,SELBYTE(cAI,i)))<0) return ret;
-	for(i=0;i<4;i++) if((ret=WriteCell(17+call[c]*9+i,SELBYTE(cBI,i)))<0) return ret;
-	if((ret=WriteCell(21+call[c]*9,sgI))<0) return ret;
+	for(i=0;i<4;i++) if((ret=WriteCell(13+c*9+i,SELBYTE(cAI,i)))<0) return ret;
+	for(i=0;i<4;i++) if((ret=WriteCell(17+c*9+i,SELBYTE(cBI,i)))<0) return ret;
+	if((ret=WriteCell(21+c*9,sgI))<0) return ret;
 	
 	//Mark the channel as calibrated and exit!
-	if((ret=WriteCell(50+call[c],0x38))<0) return ret;
+	if((ret=WriteCell(50+c,0x38))<0) return ret;
+	hvmask|=(1<<c);
 	return 0;
 	
 	err: //ERROR: exit from everything
@@ -1159,9 +1167,9 @@ int FzTest::ApplyHV(const int c,const int V) {
 	uint8_t reply[MLENG];
 	
 	//Wait HV ready: 60s timeout
-	if(!fVerb) printf(YEL "ApplyHV " Mag " %s-%s" NRM " waiting HV ready...\n",lChan[c%3],lFPGA[c/3]);
+	if(!fVerb) printf(YEL "ApplyHV " Mag " %s-%s" NRM " waiting HV ready...\n",lChan[c%2],lFPGA[c/2]);
 	for(i=0;i<60;i++) {
-		sprintf(query,"%s,%d",lFPGA[c/3],c%3+1);
+		sprintf(query,"%s,%d",lFPGA[c/2],c%2+1);
 		if((ret=sock->Send(blk,fee,0xA0,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&tmp);
 		if(ret!=1) return -20;
@@ -1171,21 +1179,21 @@ int FzTest::ApplyHV(const int c,const int V) {
 	if(i>=60) return -20;
 	
 	//Apply HV
-	sprintf(query,"%s,%d,%d,%d",lFPGA[c/3],c%3+1,V,HVRAMP);
+	sprintf(query,"%s,%d,%d,%d",lFPGA[c/2],c%2+1,V,HVRAMP);
 	if((ret=sock->Send(blk,fee,0x86,query,reply,fVerb))) return ret;
 	
 	//Wait until ramp is completed
-	if(!fVerb) printf(UP BLD "ApplyHV " Mag " %s-%s" NRM " ramping...         \n",lChan[c%3],lFPGA[c/3]);
+	if(!fVerb) printf(UP BLD "ApplyHV " Mag " %s-%s" NRM " ramping...         \n",lChan[c%2],lFPGA[c/2]);
 	for(i=0;i<50;i++) {
 		sleep(1);
-		sprintf(query,"%s,%d",lFPGA[c/3],c%3+1);
+		sprintf(query,"%s,%d",lFPGA[c/2],c%2+1);
 		if((ret=sock->Send(blk,fee,0xA0,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&tmp);
 		if(ret!=1) return -20;
 		if(tmp==1) break;
 	}
 	if(i==50) return -20;
-	if(!fVerb) printf(UP GRN "ApplyHV " Mag " %s-%s" NRM " reached target voltage: %3d V\n",lChan[c%3],lFPGA[c/3],V);
+	if(!fVerb) printf(UP GRN "ApplyHV " Mag " %s-%s" NRM " reached target voltage: %3d V\n",lChan[c%2],lFPGA[c/2],V);
 	return 0;
 }
 
@@ -1197,17 +1205,17 @@ int FzTest::IVmeas(const int c,int *V,int *Vvar,int *I,bool wait) {
 	uint8_t reply[MLENG];
 	
 	if(I==nullptr) wait=false;
-	if(!fVerb) printf(BLD "IVmeas  " Mag " %s-%s" NRM " waiting for current stabilization\n",lChan[c%3],lFPGA[c/3]);
+	if(!fVerb) printf(BLD "IVmeas  " Mag " %s-%s" NRM " waiting for current stabilization\n",lChan[c%2],lFPGA[c/2]);
 	sleep(2);
 	//60s timeout for current measurement
 	for(int i=0;i<20;i++) {
 		sleep(3);
-		sprintf(query,"%s,%d",lFPGA[c/3],c%3+1);
+		sprintf(query,"%s,%d",lFPGA[c/2],c%2+1);
 		if((ret=sock->Send(blk,fee,0x87,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&Itmp);
 		if(ret!=1) return -20;
 		if(!wait) break;
-		if(!fVerb) printf(UP BLD "IVmeas  " Mag " %s-%s" NRM " waiting for current stabilization: " BLD "%5d" NRM " nA\n",lChan[c%3],lFPGA[c/3],Itmp);
+		if(!fVerb) printf(UP BLD "IVmeas  " Mag " %s-%s" NRM " waiting for current stabilization: " BLD "%5d" NRM " nA\n",lChan[c%2],lFPGA[c/2],Itmp);
 		if(old>=0) {
 			dir=((Itmp==old)?dir:((Itmp>old)?1:-1));
 			if(oldir!=0 && oldir!=dir) Nch++;
@@ -1227,7 +1235,7 @@ int FzTest::IVmeas(const int c,int *V,int *Vvar,int *I,bool wait) {
 	
 	//voltage measurement (3 meas at 0.5s interval)
 	Vmax=0; Vmin=500; Nch=0; av=0;
-	sprintf(query,"%s,%d",lFPGA[c/3],c%3+1);
+	sprintf(query,"%s,%d",lFPGA[c/2],c%2+1);
 	for(int i=0;i<3;i++) {
 		usleep(500000);
 		if((ret=sock->Send(blk,fee,0x88,query,reply,fVerb))) return ret;
@@ -1243,7 +1251,7 @@ int FzTest::IVmeas(const int c,int *V,int *Vvar,int *I,bool wait) {
 		Vtmp=(int)(0.5+av/((double)Nch));
 		if(V!=nullptr) *V=Vtmp;
 		if(Vvar!=nullptr) *Vvar=Vmax-Vmin;
-		if(!fVerb) printf(UP GRN "IVmeas  " Mag " %s-%s" NRM "                         " BLD "%3d" NRM " V      " BLD "%5d" NRM " nA\n",lChan[c%3],lFPGA[c/3],Vtmp,Itmp);
+		if(!fVerb) printf(UP GRN "IVmeas  " Mag " %s-%s" NRM "                         " BLD "%3d" NRM " V      " BLD "%5d" NRM " nA\n",lChan[c%2],lFPGA[c/2],Vtmp,Itmp);
 		return 0;
 	}
 	return -20;
@@ -1255,19 +1263,17 @@ int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	double av;
-	const int Ich[5]={0,1,1,2,3};
-	const int Vch[5]={4,5,5,6,7};
 	
-	if(!fVerb) printf(BLD "IVADC   " Mag " %s-%s" NRM " waiting for current stabilization\n",lChan[c%3],lFPGA[c/3]);
+	if(!fVerb) printf(BLD "IVADC   " Mag " %s-%s" NRM " waiting for current stabilization\n",lChan[c%2],lFPGA[c/2]);
 	sleep(1);
 	//30s timeout for current stabilization
-	sprintf(query,"%d",Ich[c]);
+	sprintf(query,"%d",c);
 	for(int i=0;i<30;i++) {
 		sleep(1);
 		if((ret=sock->Send(blk,fee,0x8F,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&tmp);
 		if(ret!=1) return -20;
-		if(!fVerb) printf(UP BLD "IVADC   " Mag " %s-%s" NRM " waiting for current stabilization: " BLD "%5d\n" NRM,lChan[c%3],lFPGA[c/3],tmp);
+		if(!fVerb) printf(UP BLD "IVADC   " Mag " %s-%s" NRM " waiting for current stabilization: " BLD "%5d\n" NRM,lChan[c%2],lFPGA[c/2],tmp);
 		if(old>=0) {
 			dir=((tmp==old)?dir:((tmp>old)?1:-1));
 			if(oldir!=0 && oldir!=dir) Nch++;
@@ -1281,9 +1287,9 @@ int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
 	}
 	
 	//Current measurement: 10 samples (ADC isn't already averaged onboard, differently from calibrated I measurement!)
-	if(!fVerb) printf(UP BLD "IVADC   " Mag " %s-%s" NRM " current stabilized. Measuring current...      \n",lChan[c%3],lFPGA[c/3]);
+	if(!fVerb) printf(UP BLD "IVADC   " Mag " %s-%s" NRM " current stabilized. Measuring current...      \n",lChan[c%2],lFPGA[c/2]);
 	av=0;
-	sprintf(query,"%d",Ich[c]);
+	sprintf(query,"%d",c);
 	for(int i=0;i<10;i++) {
 		usleep(50000);
 		if((ret=sock->Send(blk,fee,0x8F,query,reply,fVerb))) return ret;
@@ -1299,9 +1305,9 @@ int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
 	}
 	
 	//Voltage measurement: 10 samples
-	if(!fVerb) printf(UP BLD "IVADC   " Mag " %s-%s" NRM " current stabilized. Measuring voltage...      \n",lChan[c%3],lFPGA[c/3]);
+	if(!fVerb) printf(UP BLD "IVADC   " Mag " %s-%s" NRM " current stabilized. Measuring voltage...      \n",lChan[c%2],lFPGA[c/2]);
 	Vmax=0; Vmin=65535; av=0;
-	sprintf(query,"%d",Vch[c]);
+	sprintf(query,"%d",c+4);
 	for(int i=0;i<10;i++) {
 		usleep(50000);
 		if((ret=sock->Send(blk,fee,0x8F,query,reply,fVerb))) return ret;
@@ -1314,7 +1320,7 @@ int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
 	tmp=(int)(0.5+av/10.);
 	if(V!=nullptr) *V=av/10.;
 	if(Vvar!=nullptr) *Vvar=Vmax-Vmin;
-	if(!fVerb) printf(UP GRN "IVADC   " Mag " %s-%s" NRM "   ADC readings -> " BLD "%5d" NRM " (V)     " BLD "%5d" NRM " (I)\n",lChan[c%3],lFPGA[c/3],tmp,old);
+	if(!fVerb) printf(UP GRN "IVADC   " Mag " %s-%s" NRM "   ADC readings -> " BLD "%5d" NRM " (V)     " BLD "%5d" NRM " (I)\n",lChan[c%2],lFPGA[c/2],tmp,old);
 	return 0;
 }
 
@@ -1347,25 +1353,24 @@ int FzTest::SetDAC(const int c, const int vset, int vprev) {
 	int N=0,ret,inc;
 	char query[SLENG];
 	uint8_t reply[MLENG];
-	int V2D=((c==0)||(c==3))?DACVSI1:DACVSI2;
 	
 	//dac range: 0-65535
 	if((vset<0)||(vset>65535)) return -20;
 	if((vprev<0)||(vprev>65535)) {
 		//previous value was unknown, trying to add 1 and reading new value
-		sprintf(query,"%s,%d,+,1",lFPGA[c/3],(c%3)+1);
+		sprintf(query,"%s,%d,+,1",lFPGA[c/2],(c%2)+1);
 		if((ret=sock->Send(blk,fee,0x8D,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&vprev);
 		if(ret!=1) return -20;
 	}
 	
-	if(!fVerb) printf(BLD "SetDAC  " Mag " %s-%s" NRM " ramping...\n",lChan[c%3],lFPGA[c/3]);
+	if(!fVerb) printf(BLD "SetDAC  " Mag " %s-%s" NRM " ramping...\n",lChan[c%2],lFPGA[c/2]);
 	for(;vset!=vprev;) {
 		inc=abs(vset-vprev);
-		if(inc>V2D) inc=V2D;
+		if(inc>V2D[c%2]) inc=V2D[c%2];
 		
-		if(vset>vprev) sprintf(query,"%s,%d,+,%d",lFPGA[c/3],(c%3)+1,inc);
-		else sprintf(query,"%s,%d,-,%d",lFPGA[c/3],(c%3)+1,inc);
+		if(vset>vprev) sprintf(query,"%s,%d,+,%d",lFPGA[c/2],(c%2)+1,inc);
+		else sprintf(query,"%s,%d,-,%d",lFPGA[c/2],(c%2)+1,inc);
 		if((ret=sock->Send(blk,fee,0x8D,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&vprev);
 		if(ret!=1) return -20;
@@ -1381,11 +1386,71 @@ int FzTest::SetDAC(const int c, const int vset, int vprev) {
 		printf(RED "SetDAC  " NRM " timeout. Vprev=%d, Vset=%d\n" NRM,vprev,vset);
 		return -20;
 	}
-	if(!fVerb) printf(UP GRN "SetDAC  " Mag " %s-%s" NRM " reached DAC level " BLD "%5d\n" NRM,lChan[c%3],lFPGA[c/3],vset);
+	if(!fVerb) printf(UP GRN "SetDAC  " Mag " %s-%s" NRM " reached DAC level " BLD "%5d\n" NRM,lChan[c%2],lFPGA[c/2],vset);
 	return 0;
 }
 
 //EEPROM read/write functions
+//Dump all the EEPROM content to a file
+int FzTest::FullRead(const char *filename) {
+	int ret,lastr;
+	FILE *f=fopen(filename,"w");
+	if(f==NULL) {
+		perror(RED "FullRead" NRM);
+		return -50;
+	}
+	
+	if(!fTested) printf(YEL "FullRead" NRM " fast test was not performed. Performing version check only...\n");
+	if((ret=LVHVtest())<0) goto err;
+	lastr=v4?655:303;
+	
+	if(!fVerb) printf("\n");
+	for(int i=0;i<=lastr;i++) {
+		if((!fVerb)&&(i%10==0)) printf(UP BLD "FullRead" NRM " reading cell %3d/%3d\n",i,lastr);
+		if((ret=ReadCell(i))<0) goto err;
+		fprintf(f,"%3d %02X\n",i,ret);
+	}
+	if(!fVerb) printf(UP GRN "FullRead" NRM " PIC EEPROM fully read and stored!\n");
+	return 0;
+	
+	err:
+	fclose(f);
+	return ret;
+}
+
+//Overwrite all the EEPROM content from a file
+int FzTest::FullWrite(const char *filename) {
+	int ret,i,N,lastr,add,cont;
+	char row[SLENG];
+	FILE *f=fopen(filename,"r");
+	if(f==NULL) {
+		perror(RED "FullWrit" NRM);
+		return -50;
+	}
+	
+	if(!fTested) printf(YEL "FullWrit" NRM " fast test was not performed. Performing version check only...\n");
+	if((ret=LVHVtest())<0) goto err;
+	lastr=v4?655:303;
+	
+	for(N=0;fgets(row,SLENG,f);N++);
+	rewind(f);
+	
+	if(!fVerb) printf("\n");
+	for(i=0;fgets(row,SLENG,f);i++) {
+		if((!fVerb)&&(i%10==0)) printf(UP BLD "FullWrit" NRM " writing row %3d/%3d\n",i,N);
+		ret=sscanf(row," %d %x ",&add,&cont);
+		if((ret!=2)||(add<0)||(add>lastr)) continue;
+		if((ret=WriteCell(add,cont))<0) goto err;
+	}
+	if(!fVerb) printf(UP);
+	printf(GRN "FullWrit" NRM " memory overwrited. Reboot the card to apply the changes\n");
+	return 0;
+	
+	err:
+	fclose(f);
+	return ret;
+}
+
 //Read a cell in EEPROM
 int FzTest::ReadCell(const int add) {
 	int ret,cont;

@@ -32,10 +32,10 @@ static const float blref3[6]={-7400,-5650,-4500,-7400,-5650,-7400};
 static const float blref5[6]={-7400,-5100,-6150,-7400,-4250,-7400};
 static const float bltoll[6]={ 0.02,  0.1,  0.1, 0.02,  0.1, 0.02};
 static const float blvtol[6]={   20,  200,  200,   20,  200,   20};
-//HV constants:               Si1A    Si2A     N/A    Si1B    Si2B
-static const int maxhv3[5]={    200,    350,    200,    200,    350};
-static const int maxhv4[5]={    300,    400,    300,    300,    400};
-static const int    V2D[5]={DACVSI1,DACVSI2,DACVSI2,DACVSI1,DACVSI2};
+//HV constants:                Si1     Si2
+static const int maxhv3[2]={    200,    350};
+static const int maxhv4[2]={    300,    400};
+static const int    V2D[2]={DACVSI1,DACVSI2};
 
 //Fails:
 //	   1 -> Overheat		=> check cooling
@@ -62,6 +62,9 @@ public:
 	int Guided();
 	int Manual();
 	
+	int FullRead(const char *filename);
+	int FullWrite(const char *filename);
+	
 private:
 	void Init();
 	int GetVoltage(double *V, double *Vvar, const bool wait=true);
@@ -71,6 +74,7 @@ private:
 	int OffCurve();
 	int BLmeas(const int ch,const int tries,int *Bl,int *Blvar);
 	
+	int LVHVtest();
 	int HVtest();
 	int HVcalib();
 	int HVcalChan(const int c,const int max,const bool dac);
@@ -89,8 +93,9 @@ private:
 	int failmask;
 	
 	//FEE data
-	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],hvmask,dcreact[12],V20[5],V20var[5],Vfull[5],Vfullvar[5],Ifull[5],I1000[5];
+	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],hvmask,dcreact[12],V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
+	//double Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 };
 
 #endif

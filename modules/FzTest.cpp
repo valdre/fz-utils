@@ -25,7 +25,11 @@ void FzTest::Init() {
 	gomask=0;
 	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000; dcreact[c]=1000;}
 	hvmask=-1;
-	for(c=0;c<4;c++) {V20[c]=-1; V20var[c]=-1; Vfull[c]=-1; Vfullvar[c]=-1; Ifull[c]=-1; I1000[c]=-1;}
+	for(c=0;c<4;c++) {
+		V20[c]=-1; V20var[c]=-1; Vfull[c]=-1; Vfullvar[c]=-1; Ifull[c]=-1; I1000[c]=-1;
+		for(int i=0;i<41;i++) {Vkei[c][i]=-1; Vdac[c][i]=-1; Vadc[c][i]=-1; Iadc[c][i]=-1;}
+		Vp0[c]=sqrt(-1); Vp1[c]=sqrt(-1); Ip0[c]=sqrt(-1); Ip1[c]=sqrt(-1);
+	}
 	failmask=0;
 	return;
 }
@@ -79,10 +83,10 @@ int FzTest::GetVoltage(double *V, double *Vvar, const bool wait) {
 		if(old>=0) {
 			dir=((tmp==old)?dir:((tmp>old)?1:-1));
 			if(oldir!=0 && oldir!=dir) Nch++;
-			if(fabs(tmp-old)<=0.1) Nstab++;
+			if(fabs(tmp-old)<=0.01) Nstab++;
 			else Nstab=0;
-			//exit after 3 changes of direction or 3 stable readings (Nstab==2) in a row
-			if(Nch==3 || Nstab==2) break;
+			//exit after 4 changes of direction or 4 stable readings (Nstab==3) in a row
+			if(Nch==4 || Nstab==3) break;
 		}
 		oldir=dir;
 		old=tmp;
@@ -90,10 +94,12 @@ int FzTest::GetVoltage(double *V, double *Vvar, const bool wait) {
 	
 	//Precise voltage measurement
 	old=0; //used as average
+	dir=0; //used as sign
 	for(i=0;i<5;i++) {
 		usleep(200000);
 		if((ret=ksock->KSend(":read?",reply,false))<0) return ret;
 		if(sscanf(reply,"%lg",&tmp)<1) return -20;
+		if(i==4 && tmp<0) dir=1;
 		tmp=fabs(tmp);
 		old+=tmp;
 		if(tmp<min) min=tmp;
@@ -101,7 +107,7 @@ int FzTest::GetVoltage(double *V, double *Vvar, const bool wait) {
 	}
 	if(V!=nullptr) *V=old/5.;
 	if(Vvar!=nullptr) *Vvar=max-min;
-	return 0;
+	return dir;
 }
 
 //Public: fast test routine
@@ -548,8 +554,6 @@ int FzTest::Manual() {
 		printf("    2) Offset auto-calibration\n");
 		printf("    3) Plot offset calibration curve\n");
 		printf("    4) HV calibration\n");
-		printf("    5) Import EEPROM data from DB\n");
-		if(sn>0 && sn<255) printf("    6) Update DB\n");
 		if(fTested) printf("    8) Repeat the fast test\n");
 		else printf("    8) Perform the fast test\n");
 		if(fTested) printf("    9) Repeat the fast test with HV check\n");
@@ -978,7 +982,7 @@ int FzTest::HVcalib() {
 //Calibration of a specific HV channel
 int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	int N,i,ret,Vtarg,Vvar,maxvar,dau,oldau=-1,dacadr,isamadr;
-	double VK,VKvar,Vadc[50],Iadc[50],lastV[2]={0,0},lastD[2]={0,0},bakV,bakD;
+	double VKvar,lastV[2]={0,0},lastD[2]={0,0},bakV,bakD;
 	const int cdisc[4]={0,2,1,3};
 	
 	switch(c) {
@@ -994,21 +998,30 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	if((ret=WriteCell(50+c,255))<0) return ret;
 	hvmask&=(~(1<<c));
 	
-	//Before starting: force 0V to DAC output, wait 2s and check Keithley
+	//Check polarity
+	if((ret=SetDAC(c,500))<0) return ret; //around 3.6V for Si1 and 5.9V for Si2
+	if((N=GetVoltage(nullptr,nullptr,false))<0) return ret;
+	//Force 0V to DAC output
 	if((ret=SetDAC(c,0))<0) return ret;
-	sleep(2);
-	if((ret=GetVoltage(&VK,nullptr,false)<0)) return ret;
-	if(VK>=5) {
-		printf(YEL "HVcalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,VK,lChan[c%2],lFPGA[c/2]);
+	Vdac[c][0]=0;
+	if(N) {
+		printf(YEL "HVcalib " NRM " Inverted probe! Swap the connectors on Keithley and press enter to continue...");
+		for(;getchar()!='\n';);
+	}
+	
+	//Check Keithley at 0V (waiting for voltage stability)
+	if((ret=GetVoltage(Vkei[c],nullptr,true))<0) return ret;
+	if(Vkei[c][0]>=5) {
+		printf(YEL "HVcalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,Vkei[c][0],lChan[c%2],lFPGA[c/2]);
 		goto bad;
 	}
 	
 	//ADC calibration point at 0V
-	if((ret=IVADC(c,Vadc,&Vvar,Iadc))<0) goto err;
-	maxvar=(int)(Vadc[0]/200); //0.5%
+	if((ret=IVADC(c,Vadc[c],&Vvar,Iadc[c]))<0) goto err;
+	maxvar=(int)(Vadc[c][0]/200); //0.5%
 	if(maxvar<50) maxvar=50;
 	if(Vvar>=maxvar) {
-		printf(YEL "HVcalib " NRM " unstable HV: Vtarg=0, ADC=%5.0f, DADC=%5d\n",Vadc[0],Vvar);
+		printf(YEL "HVcalib " NRM " unstable HV: Vtarg=0, ADC=%5.0f, DADC=%5d\n",Vadc[c][0],Vvar);
 		goto bad;
 	}
 	
@@ -1032,29 +1045,30 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 				
 				if((ret=SetDAC(c,dau,oldau))<0) goto err;
 				oldau=dau;
-				if((ret=GetVoltage(&VK,&VKvar,true)<0)) goto err;
+				if((ret=GetVoltage(Vkei[c]+N,&VKvar,true))<0) goto err;
 				if(VKvar>=1) {
-					printf(YEL "HVcalib " NRM " unstable HV: Vtarg=%d, VK=%.3f, DVK=%.3f\n",Vtarg,VK,VKvar);
+					printf(YEL "HVcalib " NRM " unstable HV: Vtarg=%d, VKeith=%.3f, DVKeith=%.3f\n",Vtarg,Vkei[c][N],VKvar);
 					goto bad;
 				}
-				if(fabs(VK-(double)Vtarg)>5) {
-					printf(YEL "HVcalib " NRM " unexpected HV meas.: Vtarg=%d, VK=%.3f, DVK=%.3f\n",Vtarg,VK,VKvar);
+				if(fabs(Vkei[c][N]-(double)Vtarg)>5) {
+					printf(YEL "HVcalib " NRM " unexpected HV meas.: Vtarg=%d, VKeith=%.3f, DVKeith=%.3f\n",Vtarg,Vkei[c][N],VKvar);
 					goto bad;
 				}
-				printf(CYA "HVcalib " Mag " %s-%s " NRM "       DAC set to %5d => VK = " BLD "%7.3f\n" NRM,lChan[c%2],lFPGA[c/2],dau,VK);
+				printf(CYA "HVcalib " Mag " %s-%s " NRM "       DAC set to %5d => VKeith = " BLD "%7.3f\n" NRM,lChan[c%2],lFPGA[c/2],dau,Vkei[c][N]);
 				
-				lastV[0]=lastV[1]; lastD[0]=lastD[1];
-				lastV[1]=VK;       lastD[1]=(double)dau;
+				lastV[0]=lastV[1];   lastD[0]=lastD[1];
+				lastV[1]=Vkei[c][N]; lastD[1]=(double)dau;
 				
-				if(fabs(VK-(double)Vtarg)<0.01) break;
-				if(fabs(VK-lastV[0])<0.005) break;
+				if(fabs(Vkei[c][N]-(double)Vtarg)<0.01) break;
+				if(fabs(Vkei[c][N]-lastV[0])<0.005) break;
 				if(abs(dau-(int)(lastD[0]))<5) break;
 			}
-			if(i>=20 || fabs(VK-(double)Vtarg)>=0.1) {
+			if(i>=20 || fabs(Vkei[c][N]-(double)Vtarg)>=0.1) {
 				printf(YEL "HVcalib " NRM " unable to reach target voltage!\n");
 				goto bad;
 			}
 			lastV[0]=bakV; lastD[0]=bakD;
+			Vdac[c][N]=(double)dau;
 			
 			//Write the DAC value in the correspondent PIC EEPROM cell
 			for(i=0;i<2;i++) if((ret=WriteCell(dacadr+(N-1)*2+i,SELBYTE(dau,i)))<0) goto err;
@@ -1062,33 +1076,34 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 		else if((ret=ApplyHV(c,Vtarg))<0) goto err;
 		
 		//ADC calibration
-		if((ret=IVADC(c,Vadc+N,&Vvar,Iadc+N))<0) goto err;
-		maxvar=(int)(Vadc[N]/200); //0.5%
+		if((ret=IVADC(c,Vadc[c]+N,&Vvar,Iadc[c]+N))<0) goto err;
+		maxvar=(int)(Vadc[c][N]/200); //0.5%
 		if(maxvar<50) maxvar=50;
 		if(Vvar>=maxvar) {
-			printf(YEL "HVcalib " NRM " unstable HV: Vtarg=%d, ADC=%5.0f, DADC=%5d\n",Vtarg,Vadc[N],Vvar);
+			printf(YEL "HVcalib " NRM " unstable HV: Vtarg=%d, ADC=%5.0f, DADC=%5d\n",Vtarg,Vadc[c][N],Vvar);
 			goto bad;
 		}
 		if(v4) {
-			dau=(int)(0.5+Iadc[N]);
+			dau=(int)(0.5+Iadc[c][N]);
 			//Store I samples only in v4/5 cards
 			for(i=0;i<2;i++) if((ret=WriteCell(isamadr+(N-1)*2+i,SELBYTE(dau,i)))<0) goto err;
 		}
 	}
 	//Back to 0V
 	if((ret=SetDAC(c,0))<0) return ret;
+	printf("\n");
 	
 	//Update discrete calibration status EEPROM cell
 	if((ret=WriteCell(78+cdisc[c],0))<0) return ret;
 	
 	//Computing linear fit coefficients and check limits
-	double ii[50],p0,p1;
+	double ii[41],p0,p1;
 	long int cAV,cBV,cBI;
 	unsigned long int cAI;
 	int sgI,sgV;
 	
-	for(i=0;i<50;i++) ii[i]=(double)i;
-	if((ret=LinReg(N,Vadc,ii,&p1,&p0))<0) return 0;
+	for(i=0;i<41;i++) ii[i]=(double)i;
+	if((ret=LinReg(N,Vadc[c],ii,&p1,&p0))<0) return 0;
 	if(v4) {
 		cAV = (long int)(p1*1.e7);
 		cBV = labs((long int)(p0*1.e7));
@@ -1117,7 +1132,9 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 		printf(YEL "HVcalib " NRM " V coeff A is outside boundaries\n");
 		return 0;
 	}
-	if((ret=LinReg(N,ii,Iadc,&p1,&p0))<0) return 0;
+	Vp0[c]=-p0/p1; Vp1[c]=1./(10.*p1);
+	
+	if((ret=LinReg(N,ii,Iadc[c],&p1,&p0))<0) return 0;
 	cAI = (unsigned long int)(p1*1.e3);
 	cBI = labs((long int)p0);
 	sgI = (p0>=0) ? 1 : 0;
@@ -1129,8 +1146,9 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 		printf(YEL "HVcalib " NRM " I coeff B is outside boundaries\n");
 		return 0;
 	}
-	printf(GRN "HVcalib " NRM " V coeff: A =% 12ld, B =% 12ld\n",cAV,sgV?cBV:-cBV);
-	printf(GRN "HVcalib " NRM " I coeff: A =%12lu, B =% 12ld\n",cAI,sgI?cBI:-cBI);
+	Ip0[c]=p0; Ip1[c]=p1/10.;
+	printf(GRN "HVcalib " NRM " ADC-V = % 8.3f * V %c %6.3f\n",Vp1[c],(Vp0[c]<0)?'-':'+',fabs(Vp0[c]));
+	printf(GRN "HVcalib " NRM " ADC-I = % 8.3f * V %c %6.3f\n",Ip1[c],(Ip0[c]<0)?'-':'+',fabs(Ip0[c]));
 	
 	for(i=0;i<2;i++) if((ret=WriteCell(54+c*6+i,SELBYTE(cAV,i)))<0) return ret;
 	for(i=0;i<4;i++) {
@@ -1320,7 +1338,7 @@ int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
 	tmp=(int)(0.5+av/10.);
 	if(V!=nullptr) *V=av/10.;
 	if(Vvar!=nullptr) *Vvar=Vmax-Vmin;
-	if(!fVerb) printf(UP GRN "IVADC   " Mag " %s-%s" NRM "   ADC readings -> " BLD "%5d" NRM " (V)     " BLD "%5d" NRM " (I)\n",lChan[c%2],lFPGA[c/2],tmp,old);
+	if(!fVerb) printf(UP GRN "IVADC   " Mag " %s-%s" NRM "   ADC readings -> " BLD "%5d" NRM " (V)       " BLD "%5d" NRM " (I)\n",lChan[c%2],lFPGA[c/2],tmp,old);
 	return 0;
 }
 
@@ -1463,7 +1481,7 @@ int FzTest::ReadCell(const int add) {
 	}
 	sprintf(query,"%d",add);
 	if((ret=sock->Send(blk,fee,0x90,query,reply,fVerb))<0) return ret;
-	if(sscanf((char *)reply,"content : %d",&cont)<1) {
+	if(sscanf((char *)reply,"0|%d",&cont)<1) {
 		printf(RED "ReadCell" NRM " bad reply (%s)\n", reply);
 		return -20;
 	}
@@ -1477,15 +1495,46 @@ int FzTest::WriteCell(const int add,const int cont) {
 	uint8_t reply[MLENG];
 	
 	if(add<0 || add>1023) {
-		printf(RED "WriteCel" NRM " invalid address (%d)\n",add);
+		printf(RED "Write   " NRM " invalid address (%d)\n",add);
 		return -20;
 	}
 	if(cont<0 || cont>255) {
-		printf(RED "WriteCel" NRM " invalid content (%d)\n",cont);
+		printf(RED "Write   " NRM " invalid content (%d)\n",cont);
 		return -20;
 	}
 	sprintf(query,"%d,%d",add,cont);
 	if((ret=sock->Send(blk,fee,0x95,query,reply,fVerb))<0) return ret;
+	printf(GRN "Write   " NRM " stored 0x%02X at address %3d\n",cont,add);
 	
 	return 0;
+}
+
+//Update the card DB on disk
+void FzTest::UpdateDB() {
+	char ch,dirname[SLENG];
+	struct stat st;
+	
+	printf("Test ended. Do you want to update the FEE database [Y/n]?");
+	ch=getchar();
+	if(ch!='\n') {
+		for(;getchar()!='\n';);
+	}
+	if(ch!='\n' && ch!='y' && ch!='Y') return;
+	
+	if(sn<=0 || sn>=65535) {
+		printf("SN is not defined! Type a valid SN (1-65534): ");
+		scanf("%d",&sn); getchar();
+		if(sn<=0 || sn>=65535) return;
+	}
+	
+	sprintf(dirname,"testdb/%05d",sn);
+	if(stat(dirname,&st)<0) {
+		if(mkdir(dirname,0755)<0) {
+			perror(RED "UpdateDB" NRM);
+			return;
+		}
+	}
+	
+	
+	return;
 }

@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
 	else {
 		if((ret=test.Manual())<0) goto err;
 	}
-	return 0;
+	goto ending;
 	
 	err:
 	switch(ret) {
@@ -112,5 +112,8 @@ int main(int argc, char *argv[]) {
 		case -20: printf(RED "fz-test " NRM "anomalous SC replies (check the software and/or the firmware)\n"); break;
 		default: printf(RED "fz-test " NRM "unhandled error...\n");
 	}
-	return -1;
+	
+	ending:
+	test.UpdateDB();
+	return 0;
 }

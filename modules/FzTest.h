@@ -65,6 +65,8 @@ public:
 	int FullRead(const char *filename);
 	int FullWrite(const char *filename);
 	
+	void UpdateDB();
+	
 private:
 	void Init();
 	int GetVoltage(double *V, double *Vvar, const bool wait=true);
@@ -95,7 +97,7 @@ private:
 	//FEE data
 	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],hvmask,dcreact[12],V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
-	//double Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
+	double Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 };
 
 #endif

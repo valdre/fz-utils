@@ -13,22 +13,47 @@ FzTest::~FzTest() {
 	if(ksock!=nullptr) delete ksock;
 }
 
-void FzTest::Init() {
+//Constructor and destructor of reference data class
+FzTestRef::FzTestRef() {
 	int c;
 	
-	fTested=false;
 	v4=-1; sn=-1;
 	for(c=0;c<6;c++) temp[c]=-1;
 	strcpy(vPIC,"");
 	for(c=0;c<2;c++) strcpy(vFPGA[c],"");
 	for(c=0;c<19;c++) lv[c]=-1;
 	gomask=0;
-	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000; dcreact[c]=1000;}
+	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000;}
+	for(c=0;c<6;c++) {dacoff[c]=-1; dcreact[c]=-1;}
 	hvmask=-1;
 	for(c=0;c<4;c++) {
 		V20[c]=-1; V20var[c]=-1; Vfull[c]=-1; Vfullvar[c]=-1; Ifull[c]=-1; I1000[c]=-1;
 		for(int i=0;i<41;i++) {Vkei[c][i]=-1; Vdac[c][i]=-1; Vadc[c][i]=-1; Iadc[c][i]=-1;}
-		Vp0[c]=sqrt(-1); Vp1[c]=sqrt(-1); Ip0[c]=sqrt(-1); Ip1[c]=sqrt(-1);
+		Vp0[c]=-99; Vp1[c]=-99; Ip0[c]=-99; Ip1[c]=-99;
+	}
+}
+
+FzTestRef::~FzTestRef() {
+}
+
+void FzTest::Init() {
+	int c;
+	
+	fTested=false;
+	fCalib=false;
+	v4=-1; sn=-1;
+	for(c=0;c<6;c++) temp[c]=-1;
+	strcpy(vPIC,"");
+	for(c=0;c<2;c++) strcpy(vFPGA[c],"");
+	for(c=0;c<19;c++) lv[c]=-1;
+	gomask=0;
+	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000;}
+	for(c=0;c<6;c++) {dacoff[c]=-1; dcreact[c]=-1;}
+	hvmask=-1;
+	for(c=0;c<4;c++) {
+		V20[c]=-1; V20var[c]=-1; Vfull[c]=-1; Vfullvar[c]=-1; Ifull[c]=-1; I1000[c]=-1;
+		for(int i=0;i<41;i++) {Vkei[c][i]=-1; Vdac[c][i]=-1; Vadc[c][i]=-1; Iadc[c][i]=-1;}
+		Vp0[c]=-99; Vp1[c]=-99; Ip0[c]=-99; Ip1[c]=-99;
 	}
 	failmask=0;
 	return;
@@ -303,17 +328,38 @@ void FzTest::Report() {
 		if(bl[c]<-8500) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
 		else {
 			ref=(v4)?blref5[c%6]:blref3[c%6];
-			if((fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])||(dcreact[c]<1000)) {
+			if((fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])) {
 				failmask|=32;
 				printf(RED "Fail" NRM);
 			}
 			else printf(GRN "Pass" NRM);
 			printf(" % 20d % 10.0f",bl[c],ref);
 			if(blvar[c]>=blvtol[c%6]) {
-				printf(" Unstable DC level");
-				if(dcreact[c]<1000) printf(" -");
+				printf(" Unstable");
+				if(fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6]) printf(" -");
 			}
-			if(dcreact[c]<1000) printf(" Non responsive");
+			if(fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6]) printf(" Bad level");
+			printf("\n");
+		}
+	}
+	
+	//Baseline DC level
+	printf(BLD "\nBaseline DC level (in DAC units):\n" NRM);
+	for(c=0;c<6;c++) {
+		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
+		if(dacoff[c]<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
+		else {
+			if((dacoff[c]<500) || (dacoff[c]>900) || (dcreact[c]<1000)) {
+				failmask|=32;
+				printf(RED "Fail" NRM);
+			}
+			else printf(GRN "Pass" NRM);
+			printf(" % 20d % 10d",dacoff[c],700);
+			if(dcreact[c]<1000) {
+				printf(" Non responsive");
+				if((dacoff[c]<500) || (dacoff[c]>900)) printf(" -");
+			}
+			if((dacoff[c]<500) || (dacoff[c]>900)) printf(" Bad level");
 			printf("\n");
 		}
 	}
@@ -619,7 +665,7 @@ int FzTest::OffCheck(const int ch) {
 	
 	c=ch2c[ch];
 	//Store present DAC value
-	sprintf(query,"%s,%s",lFPGA[c/3],regDAC[c%3]);
+	sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+4);
 	if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
 	ret=sscanf((char *)reply,"0|%d",&old);
 	if(ret!=1) return -20;
@@ -636,7 +682,8 @@ int FzTest::OffCheck(const int ch) {
 	//Set DAC to previous value
 	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,old);
 	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-	dcreact[ch]=max-min;
+	dacoff[c]=old;
+	dcreact[c]=max-min;
 	return 0;
 }
 
@@ -670,7 +717,7 @@ int FzTest::OffCal() {
 			if((ret=OffCheck(ch))<0) return ret;
 		}
 		//Reading original DAC value
-		sprintf(query,"%s,%s",lFPGA[c/3],regDAC[c%3]);
+		sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+4);
 		if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&dac);
 		if(ret!=1) return -20;
@@ -684,7 +731,7 @@ int FzTest::OffCal() {
 			printf(YEL "OffCal  " NRM " %s-%s: unstable DC level\n",lADC[ch%6],lFPGA[ch/6]);
 			continue;
 		}
-		if(dcreact[ch]<1000) {
+		if(dcreact[c]<1000) {
 			printf(YEL "OffCal  " NRM " %s-%s: DC level is not responsive\n",lADC[ch%6],lFPGA[ch/6]);
 			continue;
 		}
@@ -974,6 +1021,7 @@ int FzTest::HVcalib() {
 		
 		//Calibrate!
 		if((ret=HVcalChan(c,max,dac))<0) return ret;
+		fCalib=true;
 	}
 	printf(GRN "HVcalib " NRM " calibration terminated. Please restart the card before applying HV!\n");
 	return 0;
@@ -1059,9 +1107,9 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 				lastV[0]=lastV[1];   lastD[0]=lastD[1];
 				lastV[1]=Vkei[c][N]; lastD[1]=(double)dau;
 				
-				if(fabs(Vkei[c][N]-(double)Vtarg)<0.01) break;
+				if(fabs(Vkei[c][N]-(double)Vtarg)<0.005) break;
 				if(fabs(Vkei[c][N]-lastV[0])<0.005) break;
-				if(abs(dau-(int)(lastD[0]))<5) break;
+				if(abs(dau-(int)(lastD[0]))<10) break;
 			}
 			if(i>=20 || fabs(Vkei[c][N]-(double)Vtarg)>=0.1) {
 				printf(YEL "HVcalib " NRM " unable to reach target voltage!\n");
@@ -1385,7 +1433,7 @@ int FzTest::SetDAC(const int c, const int vset, int vprev) {
 	if(!fVerb) printf(BLD "SetDAC  " Mag " %s-%s" NRM " ramping...\n",lChan[c%2],lFPGA[c/2]);
 	for(;vset!=vprev;) {
 		inc=abs(vset-vprev);
-		if(inc>V2D[c%2]) inc=V2D[c%2];
+		if(inc>2*V2D[c%2]) inc=2*V2D[c%2];
 		
 		if(vset>vprev) sprintf(query,"%s,%d,+,%d",lFPGA[c/2],(c%2)+1,inc);
 		else sprintf(query,"%s,%d,-,%d",lFPGA[c/2],(c%2)+1,inc);
@@ -1398,9 +1446,9 @@ int FzTest::SetDAC(const int c, const int vset, int vprev) {
 		if(ksock) {
 			if((ret=ksock->KSend(":read?",(char *)reply,false))<0) return ret;
 		}
-		if(++N >= 2000) break;
+		if(++N >= 1000) break;
 	}
-	if(N>=2000) {
+	if(N>=1000) {
 		printf(RED "SetDAC  " NRM " timeout. Vprev=%d, Vset=%d\n" NRM,vprev,vset);
 		return -20;
 	}
@@ -1511,20 +1559,32 @@ int FzTest::WriteCell(const int add,const int cont) {
 
 //Update the card DB on disk
 void FzTest::UpdateDB() {
-	char ch,dirname[SLENG];
+	int c,ch,ret,N,tmp1,tmp2;
+	char chr,dirname[SLENG],filename[2*SLENG+2],row[MLENG],label[SLENG],data[MLENG],lcmp[SLENG];
 	struct stat st;
+	uint8_t reply[MLENG];
+	
 	
 	printf("Test ended. Do you want to update the FEE database [Y/n]?");
-	ch=getchar();
-	if(ch!='\n') {
+	chr=getchar();
+	if(chr!='\n') {
 		for(;getchar()!='\n';);
 	}
-	if(ch!='\n' && ch!='y' && ch!='Y') return;
+	if(chr!='\n' && chr!='y' && chr!='Y') return;
 	
+	N=-1;
+	if(sn<=0) { //Try to retrieve the serial number
+		if((ret=sock->Send(blk,fee,0xA5,"Q",reply,fVerb))==0) {
+			ret=sscanf((char *)reply,"0|%d",&N);
+			if(ret!=1) N=-1;
+		}
+		if(N>0) sn=N;
+	}
 	if(sn<=0 || sn>=65535) {
-		printf("SN is not defined! Type a valid SN (1-65534): ");
-		scanf("%d",&sn); getchar();
-		if(sn<=0 || sn>=65535) return;
+		printf("SN is not defined! Type a valid SN (1-65534)>");
+		scanf("%d",&N); getchar();
+		if(N<=0 || N>=65535) return;
+		SetSN(N);
 	}
 	
 	sprintf(dirname,"testdb/%05d",sn);
@@ -1535,6 +1595,303 @@ void FzTest::UpdateDB() {
 		}
 	}
 	
+	FzTestRef ref;
+	FILE *f,*flog;
+	time_t now=time(NULL);
+	struct tm *nowtm=localtime(&now);
+	char stime[SLENG],dumpfile[SLENG];
+	strftime(stime,sizeof(stime),"%F %T",nowtm);
+	strftime(dumpfile,sizeof(dumpfile),"dump%Y%m%d%H%M%S.txt",nowtm);
 	
+	sprintf(filename,"%s/log.txt",dirname);
+	if((flog=fopen(filename,"a"))==NULL) {
+		perror(RED "UpdateDB" NRM);
+		return;
+	}
+	fprintf(flog,"[%s] New test performed\n",stime);
+	
+	//EEPROM dump
+	sprintf(filename,"%s/%s",dirname,dumpfile);
+	FullRead(filename);
+	
+	//GENERAL INFORMATION
+	sprintf(filename,"%s/general.txt",dirname);
+	f=fopen(filename,"r");
+	if(f!=NULL) {
+		//previous file exists
+		N=0; ref.hvmask=0;
+		for(;fgets(row,MLENG,f);) {
+			ret=sscanf(" %[^:]: %[^\n]",label,data);
+			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
+			if(ret!=2) continue;
+			if(strcmp(label,"FEE version")==0) {
+				if(strcmp(data,"v4/5")==0) ref.v4=1;
+				else if(strcmp(data,"v3")==0) ref.v4=0;
+			}
+			else if(strcmp(label,"FEE serial number")==0) {
+				ref.sn=atoi(data);
+				if(ref.sn<=0 || ref.sn>=65535) ref.sn=-1;
+			}
+			else if(strcmp(label,"PIC FW version")==0) {
+				if(strlen(data)<=10) strcpy(ref.vPIC,data);
+			}
+			else if(strcmp(label,"FPGA A FW version")==0) {
+				if(strlen(data)<=10) strcpy(ref.vFPGA[0],data);
+			}
+			else if(strcmp(label,"FPGA B FW version")==0) {
+				if(strlen(data)<=10) strcpy(ref.vFPGA[1],data);
+			}
+			else if(strcmp(label,"Low voltages")==0) {
+				ret=sscanf(data," %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",ref.lv,ref.lv+1,ref.lv+2,ref.lv+3,ref.lv+4,ref.lv+5,ref.lv+6,ref.lv+7,ref.lv+8,ref.lv+9,ref.lv+10,ref.lv+11,ref.lv+12,ref.lv+13,ref.lv+14,ref.lv+15,ref.lv+16,ref.lv+17,ref.lv+18);
+				if(ret!=19) {
+					for(c=0;c<19;c++) ref.lv[c]=-1;
+				}
+			}
+			else {
+				for(c=0;c<4;c++) {
+					sprintf(lcmp,"%s-%s HV calibrated",lChan[c%2],lFPGA[c/2]);
+					if(strcmp(label,lcmp)==0) {
+						if(strcmp(data,"yes")==0) {
+							N++;
+							ref.hvmask|=(1<<c);
+						}
+						else if(strcmp(data,"no")==0) N++;
+						break;
+					}
+				}
+			}
+		}
+		fclose(f);
+		if(N==0) ref.hvmask=-1;
+	}
+	if((f=fopen(filename,"w"))==NULL) {
+		perror(RED "UpdateDB" NRM);
+		fclose(flog);
+		return;
+	}
+	if(ref.v4>=0 && v4<0) v4=ref.v4;
+	if(ref.v4!=v4) fprintf(flog,"[%s]  general.txt          FEE version DB entry was updated\n",stime);
+	fprintf(f,"         FEE version: %10s\n",(v4<0)?"":((v4>0)?"v4/5":"v3"));
+	
+	if(ref.sn>=0 && sn<0) sn=ref.sn;
+	if(ref.sn!=sn) fprintf(flog,"[%s]  general.txt    FEE serial number DB entry was updated\n",stime);
+	if(sn>=0) fprintf(f,"   FEE serial number: % 10d\n",sn);
+	else fprintf(f,"   FEE serial number:           \n");
+	
+	if(strlen(ref.vPIC)>0 && strlen(vPIC)==0) strcpy(vPIC,ref.vPIC);
+	if(strcmp(ref.vPIC,vPIC)!=0) fprintf(flog,"[%s]  general.txt       PIC FW version DB entry was updated\n",stime);
+	fprintf(f,"      PIC FW version: %10s\n",vPIC);
+	
+	for(c=0;c<2;c++) {
+		if(strlen(ref.vFPGA[c])>0 && strlen(vFPGA[c])==0) strcpy(vFPGA[c],ref.vFPGA[c]);
+		if(strcmp(ref.vFPGA[c],vFPGA[c])!=0) fprintf(flog,"[%s]  general.txt    FPGA %s FW version DB entry was updated\n",stime,lFPGA[c]);
+		fprintf(f,"   FPGA %s FW version: %10s\n",lFPGA[c],vFPGA[c]);
+	}
+	
+	for(c=0;c<19;c++) {
+		if((ref.lv[c]>=0 || ref.lv[c]==-2) && lv[c]==-1) lv[c]=ref.lv[c];
+	}
+	//Always update lv
+	fprintf(flog,"[%s]  general.txt         Low voltages DB entry was updated\n",stime);
+	fprintf(f,"        Low voltages:");
+	for(c=0;c<19;c++) fprintf(f," % 4d",lv[c]);
+	fprintf(f,"\n");
+	
+	if(ref.hvmask>=0 && hvmask<0) hvmask=ref.hvmask;
+	if(ref.hvmask!=hvmask) fprintf(flog,"[%s]  general.txt     HV calib. status DB entry was updated\n",stime);
+	for(c=0;c<4;c++) {
+		if(hvmask>=0) fprintf(f," %s-%s HV calibrated: %10s\n",lChan[c%2],lFPGA[c/2],(hvmask&(1<<c))?"yes":"no");
+		else fprintf(f," %s-%s HV calibrated:           \n",lChan[c%2],lFPGA[c/2]);
+	}
+	fclose(f);
+	
+	//ANALOG CHAIN INFORMATION
+	sprintf(filename,"%s/analog.txt",dirname);
+	f=fopen(filename,"r");
+	if(f!=NULL) {
+		//previous file exists
+		for(;fgets(row,MLENG,f);) {
+			ret=sscanf(" %[^:]: %[^\n]",label,data);
+			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
+			if(ret!=2) continue;
+			
+			for(ch=0;ch<12;ch++) {
+				c=ch2c[ch];
+				sprintf(lcmp,"%s-%s offset",lADC[ch%6],lFPGA[ch/6]);
+				if(strcmp(lcmp,label)==0) {
+					N=sscanf(data," %d %d %d %d",ref.bl+ch,ref.blvar+ch,&tmp1,&tmp2);
+					if((N==4)&&(ch==0 || ch==3 || ch==5 || ch==6 || ch==9 || ch==11)) {
+						ref.dacoff[c]=tmp1; ref.dcreact[c]=tmp2;
+					}
+					else if(N!=2) {
+						ref.bl[ch]=-10000; ref.blvar[ch]=-10000;
+					}
+					break;
+				}
+			}
+		}
+		fclose(f);
+	}
+	if((f=fopen(filename,"w"))==NULL) {
+		perror(RED "UpdateDB" NRM);
+		fclose(flog);
+		return;
+	}
+	
+	fprintf(f,"# First value -> measured base line level in ADC units\n");
+	fprintf(f,"#Second value -> maximum variation of base line level\n");
+	fprintf(f,"# Third value -> currently set DAC value (QH1, Q2 and Q3 only)\n");
+	fprintf(f,"#Fourth value -> base line shift with a 200 unit variation of the DAC output (QH1, Q2 and Q3 only)\n\n");
+	for(ch=0;ch<12;ch++) {
+		sprintf(lcmp,"        %s-%s offset",lADC[ch%6],lFPGA[ch/6]);
+		if(ref.bl[ch]>-9000 && bl[ch]<-9000) {bl[ch]=ref.bl[ch]; blvar[ch]=ref.blvar[ch];}
+		else fprintf(flog,"[%s]   analog.txt %s DB entry was updated (offsets)\n",stime,lcmp);
+		fprintf(f,"%s: %5d %5d",lcmp,bl[ch],blvar[ch]);
+		if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) {
+			fprintf(f,"\n");
+			continue;
+		}
+		c=ch2c[ch];
+		if(ref.dacoff[c]>=0 && dacoff[c]<0) {dacoff[c]=ref.dacoff[c]; dcreact[c]=ref.dcreact[c];}
+		else fprintf(flog,"[%s]   analog.txt %s DB entry was updated (DAC)\n",stime,lcmp);
+		fprintf(f," %5d %5d\n",dacoff[c],dcreact[c]);
+	}
+	fclose(f);
+	
+	//HV TEST OUTPUT
+	sprintf(filename,"%s/hvtest.txt",dirname);
+	f=fopen(filename,"r");
+	if(f!=NULL) {
+		//previous file exists
+		for(;fgets(row,MLENG,f);) {
+			ret=sscanf(" %[^:]: %[^\n]",label,data);
+			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
+			if(ret!=2) continue;
+			
+			for(c=0;c<4;c++) {
+				sprintf(lcmp,"%s-%s HV test",lChan[c%2],lFPGA[c/2]);
+				if(strcmp(lcmp,label)==0) {
+					N=sscanf(data," %d %d %d %d %d %d",ref.V20+c,ref.V20var+c,ref.Vfull+c,ref.Vfullvar+c,ref.Ifull+c,ref.I1000+c);
+					if(N!=6) {
+						ref.V20[c]=-1; ref.V20var[c]=-1; ref.Vfull[c]=-1; ref.Vfullvar[c]=-1; ref.Ifull[c]=-1; ref.I1000[c]=-1;
+					}
+					break;
+				}
+			}
+		}
+		fclose(f);
+	}
+	if((f=fopen(filename,"w"))==NULL) {
+		perror(RED "UpdateDB" NRM);
+		fclose(flog);
+		return;
+	}
+	
+	fprintf(f,"# First value -> measured HV at 20V calibrated in V\n");
+	fprintf(f,"#Second value -> maximum variation of HV level at 20V\n");
+	fprintf(f,"# Third value -> measured maximum HV calibrated in V\n");
+	fprintf(f,"#Fourth value -> maximum variation of maximum HV level\n");
+	fprintf(f,"# Fifth value -> measured current at maximum voltage without load (nA)\n");
+	fprintf(f,"# Sixth value -> measured current with load (1000 nA expected)\n\n");
+	for(c=0;c<4;c++) {
+		sprintf(lcmp,"       %s-%s HV test",lChan[c%2],lFPGA[c/2]);
+		if(ref.V20[c]>=0 && V20[c]<0) {V20[c]=ref.V20[c]; V20var[c]=ref.V20var[c];}
+		else if(abs(V20[c]-ref.V20[c])>1 || abs(V20var[c]-ref.V20var[c])>1) fprintf(flog,"[%s]   hvtest.txt %s DB entry was updated (V20)\n",stime,lcmp);
+		fprintf(f,"%s: %3d %3d",lcmp,V20[c],V20var[c]);
+		
+		if(ref.Vfull[c]>=0 && Vfull[c]<0) {Vfull[c]=ref.Vfull[c]; Vfullvar[c]=ref.Vfullvar[c]; Ifull[c]=ref.Ifull[c];}
+		else if(abs(Vfull[c]-ref.Vfull[c])>1 || abs(Vfullvar[c]-ref.Vfullvar[c])>1 || abs(Ifull[c]-ref.Ifull[c])>50) fprintf(flog,"[%s]   hvtest.txt %s DB entry was updated (Vfull)\n",stime,lcmp);
+		fprintf(f," %3d %3d %4d",Vfull[c],Vfullvar[c],Ifull[c]);
+		
+		if(ref.I1000[c]>=0 && I1000[c]<0) I1000[c]=ref.I1000[c];
+		else if(abs(I1000[c]-ref.I1000[c])>50) fprintf(flog,"[%s]   hvtest.txt %s DB entry was updated (I1000)\n",stime,lcmp);
+		fprintf(f," %4d\n",I1000[c]);
+	}
+	fclose(f);
+	
+	//HV CALIBRATION DATA
+	if(!fCalib) goto fine;
+	sprintf(filename,"%s/hvcalib.txt",dirname);
+	f=fopen(filename,"r");
+	if(f!=NULL) {
+		//previous file exists
+		for(;fgets(row,MLENG,f);) {
+			ret=sscanf(" %[^:]: %[^\n]",label,data);
+			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
+			if(ret!=2) continue;
+			tmp1=0;
+			for(c=0;c<4;c++) {
+				sprintf(lcmp,"%s-%s ADC p0",lChan[c%2],lFPGA[c/2]);
+				if(strcmp(label,lcmp)==0) {
+					N=sscanf(data," %lg %lg",ref.Vp0+c,ref.Ip0+c);
+					if(N!=2) {
+						ref.Vp0[c]=-99; ref.Ip0[c]=-99;
+					}
+					tmp1=1;
+					break;
+				}
+				sprintf(lcmp,"%s-%s ADC p1",lChan[c%2],lFPGA[c/2]);
+				if(strcmp(label,lcmp)==0) {
+					N=sscanf(data," %lg %lg",ref.Vp1+c,ref.Ip1+c);
+					if(N!=2) {
+						ref.Vp1[c]=-99; ref.Ip1[c]=-99;
+					}
+					tmp1=1;
+					break;
+				}
+				int max=(v4?maxhv4[c%2]:maxhv3[c%2])/10;
+				for(ch=0;ch<=max;ch++) {
+					sprintf(lcmp,"%s-%s          %3d V",lChan[c%2],lFPGA[c/2],ch*10);
+					if(strcmp(label,lcmp)==0) {
+						N=sscanf(data," %lg %lg %lg %lg",ref.Vkei[c]+ch,ref.Vdac[c]+ch,ref.Vadc[c]+ch,ref.Iadc[c]+ch);
+						if(N!=4) {
+							ref.Vkei[c][ch]=-1; ref.Vdac[c][ch]=-1; ref.Vadc[c][ch]=-1; ref.Iadc[c][ch]=-1;
+						}
+						tmp1=1;
+						break;
+					}
+				}
+				if(tmp1) break;
+			}
+			if(tmp1) continue;
+		}
+		fclose(f);
+	}
+	if((f=fopen(filename,"w"))==NULL) {
+		perror(RED "UpdateDB" NRM);
+		fclose(flog);
+		return;
+	}
+	
+	fprintf(f,"# First value -> HV measured by Keithley (in V) \n");
+	fprintf(f,"#Second value -> corresponding DAC value\n");
+	fprintf(f,"# Third value -> voltage ADC reading (or fit parameter)\n");
+	fprintf(f,"#Fourth value -> current ADC reading (or fit parameter)\n");
+	fprintf(flog,"[%s]  hvcalib.txt HV calibration table was updated\n\n",stime);
+	for(c=0;c<4;c++) {
+		sprintf(lcmp,"%s-%s ADC p0        ",lChan[c%2],lFPGA[c/2]);
+		if(ref.Vp0[c]>-99 && Vp0[c]<=-99) Vp0[c]=ref.Vp0[c];
+		if(ref.Ip0[c]>-99 && Ip0[c]<=-99) Ip0[c]=ref.Ip0[c];
+		fprintf(f,"%s:                    %7.3f   %7.3f\n",lcmp,Vp0[c],Ip0[c]);
+		
+		sprintf(lcmp,"%s-%s ADC p1        ",lChan[c%2],lFPGA[c/2]);
+		if(ref.Vp1[c]>-99 && Vp1[c]<=-99) Vp1[c]=ref.Vp1[c];
+		if(ref.Ip1[c]>-99 && Ip1[c]<=-99) Ip1[c]=ref.Ip1[c];
+		fprintf(f,"%s:                    %7.3f   %7.3f\n",lcmp,Vp1[c],Ip1[c]);
+		
+		int max=(v4?maxhv4[c%2]:maxhv3[c%2])/10;
+		for(ch=0;ch<=max;ch++) {
+			sprintf(lcmp,"%s-%s          %3d V",lChan[c%2],lFPGA[c/2],ch*10);
+			if(ref.Vkei[c][ch]>=0 && Vkei[c][ch]<0) Vkei[c][ch]=ref.Vkei[c][ch];
+			if(ref.Vdac[c][ch]>=0 && Vdac[c][ch]<0) Vdac[c][ch]=ref.Vdac[c][ch];
+			if(ref.Vadc[c][ch]>=0 && Vadc[c][ch]<0) Vadc[c][ch]=ref.Vadc[c][ch];
+			if(ref.Iadc[c][ch]>=0 && Iadc[c][ch]<0) Iadc[c][ch]=ref.Iadc[c][ch];
+			fprintf(f,"%s: %7.3f %5.0f    %5.0f    %5.0f\n",lcmp,Vkei[c][ch],Vdac[c][ch],Vadc[c][ch],Iadc[c][ch]);
+		}
+	}
+	fclose(f);
+	
+	fine:
+	fclose(flog);
 	return;
 }

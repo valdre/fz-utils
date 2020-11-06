@@ -2,6 +2,7 @@
 #define FZTEST
 
 #include "FzSC.h"
+#include <time.h>
 
 //String maximum length
 #define SLENG 100
@@ -23,7 +24,6 @@ static const char lChan[3][4]={"Si1","Si2","CsI"};
 static const char lADC[6][4]={"QH1"," I1","QL1"," Q2"," I2"," Q3"};
 static const int c2ch[6]={0,3,5,6,9,11};
 static const int ch2c[12]={0,0,0,1,1,2,3,3,3,4,4,5};
-static const char regDAC[3][7]={"0x0004","0x005","0x006"};
 static const char lvlabel[19][50]={Mag "      VP5REFA - M121" NRM,Mag "      VP5REFB - M54 " NRM,Mag "         VM27 - M78 " NRM,Cya "       VM2A1A - M92 " NRM,Cya "       VM2A2A - M114" NRM,Cya "       VM2A1B - M37 " NRM,Cya "       VM2A2B - M109" NRM,Blu "         VP37 - M33 " NRM,Cya "       VP3A1A - M104" NRM,Cya "       VP3A2A - M116" NRM,Cya "       VP3A1B - M47 " NRM,Cya "       VP3A2B - M111" NRM,Blu "        VP33A - M89 " NRM,Blu "        VP33D - M85 " NRM,Blu "         VP25 - M3  " NRM,Blu "          VP1 - M119" NRM,Blu "        VP18A - M103" NRM,Blu "        VP18B - M118" NRM,Blu "        VP18D - M90 " NRM};
 static const float vref[19]={5000,5000,2500,2000,2000,2000,2000,3700,3000,3000,3000,3000,3300,3300,2500,1000,1800,1800,1800};
 static const char lvnotes[19][15]={"From VP12_0","From VP12_0","From VP5_5_IN","From VM27","From VM27","From VM27","From VM27","From VP5_5_IN","From VP37","From VP37","From VP37","From VP37","From VP37","From VP37","From VP5_5_IN","From VP25","From VP25","From VP25","From VP25"};
@@ -89,13 +89,24 @@ private:
 	int ReadCell(const int add);
 	int WriteCell(const int add,const int cont);
 	
-	bool fTested,fVerb;
+	bool fTested,fCalib,fVerb;
 	FzSC *sock,*ksock;
 	int blk,fee;
 	int failmask;
 	
 	//FEE data
-	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],hvmask,dcreact[12],V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
+	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],dacoff[6],dcreact[6],hvmask,V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
+	char vPIC[11],vFPGA[2][11];
+	double Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
+};
+
+class FzTestRef {
+public:
+	FzTestRef();
+	~FzTestRef();
+	
+	//FEE data
+	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],dacoff[6],dcreact[6],hvmask,V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
 	double Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 };

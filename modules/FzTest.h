@@ -81,6 +81,7 @@ private:
 	int OffCheck(const int ch);
 	int OffCal();
 	int OffCurve();
+	int OffManual();
 	int BLmeas(const int ch,const int tries,int *Bl,int *Blvar);
 	
 	int LVHVtest();

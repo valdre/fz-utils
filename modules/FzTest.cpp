@@ -608,7 +608,8 @@ int FzTest::Manual() {
 		printf("    1) Set new serial number\n");
 		printf("    2) Offset auto-calibration\n");
 		printf("    3) Plot offset calibration curve\n");
-		printf("    4) HV calibration\n");
+		printf("    4) Offset manual test\n");
+		printf("    5) HV calibration\n");
 		if(fTested) printf("    8) Repeat the fast test\n");
 		else printf("    8) Perform the fast test\n");
 		if(fTested) printf("    9) Repeat the fast test with HV check\n");
@@ -628,6 +629,9 @@ int FzTest::Manual() {
 				if((ret=OffCurve())) return ret;
 				break;
 			case 4:
+				if((ret=OffManual())) return ret;
+				break;
+			case 5:
 				if((ret=HVcalib())<0) return ret;
 				tmp=0;
 				break;
@@ -836,6 +840,51 @@ int FzTest::OffCurve() {
 	return ret;
 }
 
+//Offset manual test
+int FzTest::OffManual() {
+	int ch,c=-1,ret;
+	int old,dac,base;
+	char query[SLENG];
+	uint8_t reply[MLENG];
+	
+	printf("\nWhich channel do you want to test?\n");
+	printf("    0) QH1-A\n");
+	printf("    1)  Q2-A\n");
+	printf("    2)  Q3-A\n");
+	printf("    3) QH1-B\n");
+	printf("    4)  Q2-B\n");
+	printf("    5)  Q3-B\n");
+	printf("    anything else) nothing, quit this procedure!\n");
+	printf("> "); scanf("%d",&c); getchar();
+	if(c<0 || c>5) return 0;
+	ch=c2ch[c];
+	
+	if((ret=BLmeas(ch,3,nullptr,nullptr))<0) return ret;
+	if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) return 0;
+	
+	//Store present DAC value
+	sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+4);
+	if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
+	ret=sscanf((char *)reply,"0|%d",&old);
+	if(ret!=1) return -20;
+	
+	for(;;) {
+		printf("DAC value [neg to stop] > "); scanf("%d",&dac); getchar();
+		if(dac<0 || dac>1023) break;
+		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,dac);
+		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
+		usleep(1000);
+		if((ret=BLmeas(ch,10,&base,nullptr))<0) return ret;
+		if(!fVerb) printf(UP);
+		printf("DAC = " BLD "%4d" NRM " => BL =% 6d          \n",dac,base);
+	}
+	
+	//Set DAC to previous value
+	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,old);
+	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
+	return 0;
+}
+
 //BL offset measurement
 int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
 	int ret,N=0,tmp,min=9999,max=-9999;
@@ -857,7 +906,7 @@ int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
 		}
 	}
 	if(N==tries) {
-		*Bl=(int)(0.5+av/((double)N));
+		if(Bl!=nullptr) *Bl=(int)(0.5+av/((double)N));
 		if(Blvar!=nullptr) *Blvar=max-min;
 		return 0;
 	}

@@ -98,6 +98,7 @@ int FzTest::GetVoltage(double *V, double *Vvar, const bool wait) {
 	double tmp,old=-1,max=0,min=999;
 	int dir=0,oldir=0,Nch=0,Nstab=0;
 	
+	if(ksock==nullptr) return -20;
 	//5s timeout for voltage measurement
 	for(i=0;wait && i<25;i++) {
 		usleep(200000);
@@ -292,7 +293,7 @@ void FzTest::Report() {
 		printf("%s ",lvlabel[c]);
 		if(lv[c]<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
 		else {
-			if(fabs(vref[c]-(double)(lv[c]))/vref[c]>=0.02) {
+			if(fabs(vref[c]-(double)(lv[c]))/vref[c]>=0.05) {
 				failmask|=8;
 				printf(RED "Fail" NRM);
 			}
@@ -804,8 +805,8 @@ int FzTest::OffCurve() {
 	if(fout==NULL) return 0;
 	
 	if(!fVerb) {
-		printf(BLD " DAC  QH1-A  Q2-A  Q3-A QH1-B  Q2-B  Q3-B\n" NRM);
-		printf("------------------------------------------\n");
+		printf(BLD " DAC   QH1-A   Q2-A   Q3-A  QH1-B   Q2-B   Q3-B\n" NRM);
+		printf("------------------------------------------------\n");
 	}
 	for(dac=0;dac<1024;dac+=10) {
 		for(c=0;c<6;c++) {
@@ -1029,15 +1030,15 @@ int FzTest::HVcalib() {
 
 //Calibration of a specific HV channel
 int FzTest::HVcalChan(const int c,const int max,const bool dac) {
-	int N,i,ret,Vtarg,Vvar,maxvar,dau,oldau=-1,dacadr,isamadr;
+	int N=0,i,ret,Vtarg,Vvar,maxvar,dau,oldau=-1,dacadr,isamadr;
 	double VKvar,lastV[2]={0,0},lastD[2]={0,0},bakV,bakD;
 	const int cdisc[4]={0,2,1,3};
 	
 	switch(c) {
 		case 0:  dacadr=82;         isamadr=376; break;
 		case 1:  dacadr=v4?142:122; isamadr=436; break;
-		case 3:  dacadr=v4?222:192; isamadr=516; break;
-		case 4:  dacadr=v4?282:232; isamadr=576; break;
+		case 2:  dacadr=v4?222:192; isamadr=516; break;
+		case 3:  dacadr=v4?282:232; isamadr=576; break;
 		default: dacadr=-1;         isamadr=-1;
 	}
 	
@@ -1046,22 +1047,26 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	if((ret=WriteCell(50+c,255))<0) return ret;
 	hvmask&=(~(1<<c));
 	
-	//Check polarity
-	if((ret=SetDAC(c,500))<0) return ret; //around 3.6V for Si1 and 5.9V for Si2
-	if((N=GetVoltage(nullptr,nullptr,false))<0) return ret;
+	if(dac) {
+		//Check polarity
+		if((ret=SetDAC(c,500))<0) return ret; //around 3.6V for Si1 and 5.9V for Si2
+		if((N=GetVoltage(nullptr,nullptr,false))<0) return ret;
+	}
 	//Force 0V to DAC output
 	if((ret=SetDAC(c,0))<0) return ret;
-	Vdac[c][0]=0;
-	if(N) {
-		printf(YEL "HVcalib " NRM " Inverted probe! Swap the connectors on Keithley and press enter to continue...");
-		for(;getchar()!='\n';);
-	}
-	
-	//Check Keithley at 0V (waiting for voltage stability)
-	if((ret=GetVoltage(Vkei[c],nullptr,true))<0) return ret;
-	if(Vkei[c][0]>=5) {
-		printf(YEL "HVcalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,Vkei[c][0],lChan[c%2],lFPGA[c/2]);
-		goto bad;
+	if(dac) {
+		Vdac[c][0]=0;
+		if(N) {
+			printf(YEL "HVcalib " NRM " Inverted probe! Swap the connectors on Keithley and press enter to continue...");
+			for(;getchar()!='\n';);
+		}
+		
+		//Check Keithley at 0V (waiting for voltage stability)
+		if((ret=GetVoltage(Vkei[c],nullptr,true))<0) return ret;
+		if(Vkei[c][0]>=5) {
+			printf(YEL "HVcalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,Vkei[c][0],lChan[c%2],lFPGA[c/2]);
+			goto bad;
+		}
 	}
 	
 	//ADC calibration point at 0V
@@ -1621,7 +1626,7 @@ void FzTest::UpdateDB() {
 		//previous file exists
 		N=0; ref.hvmask=0;
 		for(;fgets(row,MLENG,f);) {
-			ret=sscanf(" %[^:]: %[^\n]",label,data);
+			ret=sscanf(row," %[^:]: %[^\n]",label,data);
 			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
 			if(ret!=2) continue;
 			if(strcmp(label,"FEE version")==0) {
@@ -1711,13 +1716,13 @@ void FzTest::UpdateDB() {
 	if(f!=NULL) {
 		//previous file exists
 		for(;fgets(row,MLENG,f);) {
-			ret=sscanf(" %[^:]: %[^\n]",label,data);
+			ret=sscanf(row," %[^:]: %[^\n]",label,data);
 			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
 			if(ret!=2) continue;
 			
 			for(ch=0;ch<12;ch++) {
 				c=ch2c[ch];
-				sprintf(lcmp,"%s-%s offset",lADC[ch%6],lFPGA[ch/6]);
+				sprintf(lcmp,"%s-%s offset",lADC[ch%6],lFPGA[ch/6]); //************BUG: TOGLIERE SPAZIO BIANCO ALL'INIZIO!!!
 				if(strcmp(lcmp,label)==0) {
 					N=sscanf(data," %d %d %d %d",ref.bl+ch,ref.blvar+ch,&tmp1,&tmp2);
 					if((N==4)&&(ch==0 || ch==3 || ch==5 || ch==6 || ch==9 || ch==11)) {
@@ -1764,7 +1769,7 @@ void FzTest::UpdateDB() {
 	if(f!=NULL) {
 		//previous file exists
 		for(;fgets(row,MLENG,f);) {
-			ret=sscanf(" %[^:]: %[^\n]",label,data);
+			ret=sscanf(row," %[^:]: %[^\n]",label,data);
 			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
 			if(ret!=2) continue;
 			
@@ -1816,12 +1821,12 @@ void FzTest::UpdateDB() {
 	if(f!=NULL) {
 		//previous file exists
 		for(;fgets(row,MLENG,f);) {
-			ret=sscanf(" %[^:]: %[^\n]",label,data);
+			ret=sscanf(row," %[^:]: %[^\n]",label,data);
 			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
 			if(ret!=2) continue;
 			tmp1=0;
 			for(c=0;c<4;c++) {
-				sprintf(lcmp,"%s-%s ADC p0",lChan[c%2],lFPGA[c/2]);
+				sprintf(lcmp,"%s-%s ADC p0        ",lChan[c%2],lFPGA[c/2]);
 				if(strcmp(label,lcmp)==0) {
 					N=sscanf(data," %lg %lg",ref.Vp0+c,ref.Ip0+c);
 					if(N!=2) {
@@ -1830,7 +1835,7 @@ void FzTest::UpdateDB() {
 					tmp1=1;
 					break;
 				}
-				sprintf(lcmp,"%s-%s ADC p1",lChan[c%2],lFPGA[c/2]);
+				sprintf(lcmp,"%s-%s ADC p1        ",lChan[c%2],lFPGA[c/2]);
 				if(strcmp(label,lcmp)==0) {
 					N=sscanf(data," %lg %lg",ref.Vp1+c,ref.Ip1+c);
 					if(N!=2) {
@@ -1853,7 +1858,7 @@ void FzTest::UpdateDB() {
 				}
 				if(tmp1) break;
 			}
-			if(tmp1) continue;
+			//if(tmp1) continue;
 		}
 		fclose(f);
 	}
@@ -1870,8 +1875,8 @@ void FzTest::UpdateDB() {
 	fprintf(flog,"[%s]  hvcalib.txt HV calibration table was updated\n\n",stime);
 	for(c=0;c<4;c++) {
 		sprintf(lcmp,"%s-%s ADC p0        ",lChan[c%2],lFPGA[c/2]);
-		if(ref.Vp0[c]>-99 && Vp0[c]<=-99) Vp0[c]=ref.Vp0[c];
-		if(ref.Ip0[c]>-99 && Ip0[c]<=-99) Ip0[c]=ref.Ip0[c];
+		if(ref.Vp0[c]>-98 && Vp0[c]<=-98) Vp0[c]=ref.Vp0[c];
+		if(ref.Ip0[c]>-98 && Ip0[c]<=-98) Ip0[c]=ref.Ip0[c];
 		fprintf(f,"%s:                    %7.3f   %7.3f\n",lcmp,Vp0[c],Ip0[c]);
 		
 		sprintf(lcmp,"%s-%s ADC p1        ",lChan[c%2],lFPGA[c/2]);

@@ -1,3 +1,5 @@
+### Simone Valdre' - 22/12/2020. Distributed under GPL-3.0-or-later licence
+
 all: classes fz-acqui fz-meter fz-tree fz-test
 	
 

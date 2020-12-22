@@ -13,6 +13,13 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <linux/if_ether.h>
+/*******************************************************************************
+*                                                                              *
+*                         Simone Valdre' - 22/12/2020                          *
+*                  distributed under GPL-3.0-or-later licence                  *
+*                                                                              *
+*******************************************************************************/
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>

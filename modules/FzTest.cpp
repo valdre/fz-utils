@@ -1779,7 +1779,7 @@ void FzTest::UpdateDB() {
 			
 			for(ch=0;ch<12;ch++) {
 				c=ch2c[ch];
-				sprintf(lcmp,"%s-%s offset",lADC[ch%6],lFPGA[ch/6]); //************BUG: TOGLIERE SPAZIO BIANCO ALL'INIZIO!!!
+				sprintf(lcmp,"%s-%s offset",lADCs[ch%6],lFPGA[ch/6]);
 				if(strcmp(lcmp,label)==0) {
 					N=sscanf(data," %d %d %d %d",ref.bl+ch,ref.blvar+ch,&tmp1,&tmp2);
 					if((N==4)&&(ch==0 || ch==3 || ch==5 || ch==6 || ch==9 || ch==11)) {

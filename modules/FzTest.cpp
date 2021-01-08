@@ -414,10 +414,10 @@ void FzTest::Report() {
 		int max=v4?maxhv4[c%2]:maxhv3[c%2];
 		if(Vfull[c]<0 || Vfullvar[c]<0) continue;
 		printf(" %3s-%1s        (Vmax) ",lChan[c%2],lFPGA[c/2]);
-		if(abs(Vfull[c]-max)>1 || Vfullvar[c]>5) printf(RED "Fail" NRM);
+		if(abs(Vfull[c]-max)>5 || Vfullvar[c]>5) printf(RED "Fail" NRM);
 		else printf(GRN "Pass" NRM);
 		printf(" % 20d        %3d",Vfull[c],max);
-		if(abs(Vfull[c]-max)>1) {
+		if(abs(Vfull[c]-max)>5) {
 			printf(" V mismatch");
 			failmask|=256;
 			if(Vfullvar[c]>5) printf(" -");
@@ -803,6 +803,11 @@ int FzTest::OffCal() {
 	}
 	//Writing DAC values to PIC EEPROM
 	if((ret=sock->Send(blk,fee,0x8E,"",reply,fVerb))) return ret;
+	
+	//Testing new BL values
+	for(ch=0;ch<12;ch++) {
+		if((ret=OffCheck(ch))<0) return ret;
+	}
 	return 0;
 }
 
@@ -1934,12 +1939,12 @@ void FzTest::UpdateDB() {
 		sprintf(lcmp,"%s-%s ADC p0        ",lChan[c%2],lFPGA[c/2]);
 		if(ref.Vp0[c]>-98 && Vp0[c]<=-98) Vp0[c]=ref.Vp0[c];
 		if(ref.Ip0[c]>-98 && Ip0[c]<=-98) Ip0[c]=ref.Ip0[c];
-		fprintf(f,"%s:                    %7.3f   %7.3f\n",lcmp,Vp0[c],Ip0[c]);
+		fprintf(f,"%s:                   %8.3f %8.3f\n",lcmp,Vp0[c],Ip0[c]);
 		
 		sprintf(lcmp,"%s-%s ADC p1        ",lChan[c%2],lFPGA[c/2]);
 		if(ref.Vp1[c]>-99 && Vp1[c]<=-99) Vp1[c]=ref.Vp1[c];
 		if(ref.Ip1[c]>-99 && Ip1[c]<=-99) Ip1[c]=ref.Ip1[c];
-		fprintf(f,"%s:                    %7.3f   %7.3f\n",lcmp,Vp1[c],Ip1[c]);
+		fprintf(f,"%s:                   %8.3f %8.3f\n",lcmp,Vp1[c],Ip1[c]);
 		
 		int max=(v4?maxhv4[c%2]:maxhv3[c%2])/10;
 		for(ch=0;ch<=max;ch++) {

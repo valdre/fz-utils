@@ -61,43 +61,47 @@ static const int    V2D[2]={DACVSI1,DACVSI2};
 
 class FzTest {
 public:
+	//methods in FzTestCore.cpp:
 	FzTest(FzSC *sck, const int Blk=0, const int Fee=0, const bool verbose=false);
 	~FzTest();
-	
 	void KeithleySetup(FzSC *sck);
+	int FullRead(const char *filename);
+	int FullWrite(const char *filename);
+	
+	//methods in FzTestUI.cpp:
 	int FastTest(bool hv=false);
 	void Report();
 	int Guided();
 	int Manual();
-	
-	int FullRead(const char *filename);
-	int FullWrite(const char *filename);
-	
 	void UpdateDB();
 	
 private:
+	//methods in FzTestCore.cpp:
 	void Init();
 	int GetVoltage(double *V, double *Vvar, const bool wait=true);
 	int SetSN(const int sn);
 	int OffCheck(const int ch);
-	int OffCal();
-	int OffCurve();
-	int OffManual();
 	int BLmeas(const int ch,const int tries,int *Bl,int *Blvar);
-	
 	int LVHVtest();
-	int HVtest();
-	int HVcalib();
 	int HVcalChan(const int c,const int max,const bool dac);
 	int ApplyHV(const int c,const int V);
+	int ApplyManyHV(const int testmask,const int *V);
 	int IVmeas(const int c,int *V,int *Vvar,int *I,bool wait=true);
+	int ManyIVmeas(const int testmask,int *V,int *Vvar,int *I,bool wait=true);
 	int IVADC(const int c,double *V,int *Vvar,double *I);
 	int LinReg(const int n,const double *x,const double *y,double *p1,double *p0);
 	int SetDAC(const int c, const int vset, int vprev=-1);
-	
 	int ReadCell(const int add);
 	int WriteCell(const int add,const int cont);
 	
+	//methods in FzTestUI.cpp:
+	int OffCal();
+	int OffCurve();
+	int OffManual();
+	int HVtest();
+	int HVcalib();
+	
+	//common variables
 	bool fTested,fCalib,fVerb;
 	FzSC *sock,*ksock;
 	int blk,fee;
@@ -109,6 +113,8 @@ private:
 	double Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 };
 
+
+//Constructor and destructor in FzTestCore.cpp
 class FzTestRef {
 public:
 	FzTestRef();

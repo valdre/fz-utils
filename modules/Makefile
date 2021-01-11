@@ -1,6 +1,6 @@
 ### Simone Valdre' - 22/12/2020. Distributed under GPL-3.0-or-later licence
 
-all: FzEventSet.pb.o Fzpbread.o FzSC.o FzMeterDict.cxx FzTest.o
+all: FzEventSet.pb.o Fzpbread.o FzSC.o FzMeterDict.cxx FzTestCore.o FzTestUI.o
 	
 
 FzEventSet.pb.cpp: FzEventSet.proto

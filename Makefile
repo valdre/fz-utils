@@ -18,7 +18,7 @@ fz-acqui: main/fz-acqui.cpp
 fz-meter: main/fz-meter.cpp modules/FzMeterDict.cxx modules/FzSC.o
 	g++ -Wall -Wextra $^ -Imodules -lm `root-config --cflags --glibs` -o $@
 
-fz-test: main/fz-test.cpp modules/FzSC.o modules/FzTest.o
+fz-test: main/fz-test.cpp modules/FzSC.o modules/FzTestCore.o modules/FzTestUI.o
 	g++ -Wall -Wextra $^ -Imodules -o $@
 
 clean:

@@ -82,7 +82,7 @@ int FzTest::FastTest(bool hv) {
 
 //Public: result report
 void FzTest::Report() {
-	int c,status;
+	int c,status,cnt;
 	float ref;
 	bool hvt=true;
 	
@@ -143,7 +143,7 @@ void FzTest::Report() {
 	printf(BLD "\nTemperatures (in °C) " NRM);
 	if(status<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
 	else {
-		if(status>=1) printf(YEL"Warn" NRM "    ");
+		if(status>=1) printf(YEL "Warn" NRM "    ");
 		else printf(GRN "Pass" NRM "    ");
 		for(c=0;c<6;c++) {
 			if(c>0) printf(",");
@@ -173,23 +173,42 @@ void FzTest::Report() {
 		}
 	}
 	
+	// ADC status
+	for(c=0;c<6;c++) {
+		if((((gomask)&(1<<c))>>c)==0 && blvar[c2ch[c]]==0 && dcreact[c]==0) {
+			adcmask|=(1<<c);
+			failmask|=4096;
+		}
+	}
+	
 	// Go/NoGo
 	printf(BLD "\nPre-amplifiers       " NRM);
 	if(gomask<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
 	else {
 		if(gomask==63) printf(GRN "Pass" NRM "         ");
 		else {
-			failmask|=16;
-			printf(RED "Fail" NRM "         ");
-		}
-		for(c=0;c<6;c++) printf(" %1d",((gomask)&(1<<c))>>c);
-		printf("       1=OK ");
-		if(gomask<63) {
-			printf("Broken:");
-			for(c=0;c<6;c++) {
-				if(((gomask)&(1<<c))==0) printf(" %s-%s",lChan[c%3],lFPGA[c/3]);
+			if((gomask|adcmask)==63) printf(YEL "Warn" NRM "         ");
+			else {
+				failmask|=16;
+				printf(RED "Fail" NRM "         ");
 			}
 		}
+		cnt=0;
+		for(c=0;c<6;c++) {
+			if(adcmask&(1<<c)) printf(" ?");
+			else {
+				printf(" %1d",((gomask)&(1<<c))>>c);
+				if((gomask&(1<<c))==0) cnt++;
+			}
+		}
+		printf("       1=OK ");
+		if(cnt) {
+			printf("Broken:");
+			for(c=0;c<6;c++) {
+				if(((gomask|adcmask)&(1<<c))==0) printf(" %s-%s",lChan[c%3],lFPGA[c/3]);
+			}
+		}
+		else if(adcmask) printf("Status unknown");
 		printf("\n");
 	}
 	
@@ -201,16 +220,19 @@ void FzTest::Report() {
 		else {
 			ref=(v4)?blref5[c%6]:blref3[c%6];
 			if((fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])) {
-				failmask|=32;
+				if((adcmask&(1<<(ch2c[c])))==0 || c==1 || c==2 || c==4 || c==7 || c==8 || c==10) failmask|=32;
 				printf(RED "Fail" NRM);
 			}
 			else printf(GRN "Pass" NRM);
 			printf(" % 20d % 10.0f",bl[c],ref);
-			if(blvar[c]>=blvtol[c%6]) {
-				printf(" Unstable");
-				if(fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6]) printf(" -");
+			if((adcmask&(1<<(ch2c[c]))) && (c==0 || c==3 || c==5 || c==6 || c==9 || c==11)) printf(" Broken ADC");
+			else {
+				if(blvar[c]>=blvtol[c%6]) {
+					printf(" Unstable");
+					if(fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6]) printf(" -");
+				}
+				if(fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6]) printf(" Bad level");
 			}
-			if(fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6]) printf(" Bad level");
 			printf("\n");
 		}
 	}
@@ -222,16 +244,19 @@ void FzTest::Report() {
 		if(dacoff[c]<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
 		else {
 			if((dacoff[c]<500) || (dacoff[c]>900) || (dcreact[c]<1000)) {
-				failmask|=32;
+				if((adcmask&(1<<c))==0) failmask|=32;
 				printf(RED "Fail" NRM);
 			}
 			else printf(GRN "Pass" NRM);
 			printf(" % 20d % 10d",dacoff[c],700);
-			if(dcreact[c]<1000) {
-				printf(" Non responsive");
-				if((dacoff[c]<500) || (dacoff[c]>900)) printf(" -");
+			if(adcmask&(1<<c)) printf(" Broken ADC");
+			else {
+				if(dcreact[c]<1000) {
+					printf(" Non responsive");
+					if((dacoff[c]<500) || (dacoff[c]>900)) printf(" -");
+				}
+				if((dacoff[c]<500) || (dacoff[c]>900)) printf(" Bad level");
 			}
-			if((dacoff[c]<500) || (dacoff[c]>900)) printf(" Bad level");
 			printf("\n");
 		}
 	}
@@ -397,6 +422,23 @@ int FzTest::Guided() {
 			if(N==2) {
 				if((ret=OffCal())<0) return ret;
 			}
+		}
+		if(failmask&4096) {
+			printf("One or more ADCs are broken (");
+			N=0; ret=0;
+			for(int c=0;c<6;c++) if(adcmask&(1<<c)) N++;
+			for(int c=0;c<6;c++) {
+				if(adcmask&(1<<c)) {
+					printf(BLD "%s" NRM,lADCcomp[c]);
+					if(++ret < N) printf(", ");
+				}
+			}
+			printf("). What do you want to do?\n");
+			printf("    1) Ignore and go on\n");
+			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("> "); scanf("%d",&N); getchar();
+			if(N!=1) N=0;
+			if(N==0) return 0;
 		}
 		if(failmask&64) {
 			printf("Some HV channels are not calibrated. What do you want to do?\n");
@@ -832,13 +874,17 @@ int FzTest::HVcalib() {
 		if(hvmask&(1<<c)) printf("    2) Calibrate ADC only (HV will be applied, but Keithley is not needed)\n");
 		printf("    3) Skip this channel\n");
 		printf("    0) Quit the HV calibration procedure\n\n");
-		printf("[default=1]> ");
+		if(hvmask&(1<<c)) printf("[default=3]> ");
+		else printf("[default=1]> ");
 		
 		ret=getchar();
-		if(ret!='\n') {
+		if(ret=='\n') {
+			if(hvmask&(1<<c)) ret=0x33;
+			else ret=0x31;
+		}
+		else {
 			for(;getchar()!='\n';);
 		}
-		if(ret=='\n') ret=0x31;
 		ret-=0x30;
 		if(ret<0||ret>3) ret=0;
 		if(ret==3) continue;
@@ -868,7 +914,7 @@ int FzTest::HVcalib() {
 		if((ret=HVcalChan(c,max,dac))<0) return ret;
 		fCalib=true;
 	}
-	printf(GRN "HVcalib " NRM " calibration terminated. Please restart the card before applying HV!\n");
+	printf(GRN "HVcalib " NRM " calibration terminated. " BLD "Please restart the card before applying HV!\n" NRM);
 	return 0;
 }
 
@@ -880,7 +926,7 @@ void FzTest::UpdateDB() {
 	uint8_t reply[MLENG];
 	
 	
-	printf("Test ended. Do you want to update the FEE database [Y/n]?");
+	printf("Test ended. Do you want to update the FEE database [Y/n]? ");
 	chr=getchar();
 	if(chr!='\n') {
 		for(;getchar()!='\n';);

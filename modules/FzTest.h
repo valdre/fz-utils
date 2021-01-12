@@ -30,6 +30,7 @@ static const char lFPGA[2][2]={"A","B"};
 static const char lChan[3][4]={"Si1","Si2","CsI"};
 static const char lADC[6][4]={"QH1"," I1","QL1"," Q2"," I2"," Q3"};
 static const char lADCs[6][4]={"QH1","I1","QL1","Q2","I2","Q3"};
+static const char lADCcomp[6][4]={"M80","M62","M45","M79","M61","M43"};
 static const int c2ch[6]={0,3,5,6,9,11};
 static const int ch2c[12]={0,0,0,1,1,2,3,3,3,4,4,5};
 static const char lvlabel[19][50]={Mag "      VP5REFA - M121" NRM,Mag "      VP5REFB - M54 " NRM,Mag "         VM27 - M78 " NRM,Cya "       VM2A1A - M92 " NRM,Cya "       VM2A2A - M114" NRM,Cya "       VM2A1B - M37 " NRM,Cya "       VM2A2B - M109" NRM,Blu "         VP37 - M33 " NRM,Cya "       VP3A1A - M104" NRM,Cya "       VP3A2A - M116" NRM,Cya "       VP3A1B - M47 " NRM,Cya "       VP3A2B - M111" NRM,Blu "        VP33A - M89 " NRM,Blu "        VP33D - M85 " NRM,Blu "         VP25 - M3  " NRM,Blu "          VP1 - M119" NRM,Blu "        VP18A - M103" NRM,Blu "        VP18B - M118" NRM,Blu "        VP18D - M90 " NRM};
@@ -58,6 +59,7 @@ static const int    V2D[2]={DACVSI1,DACVSI2};
 //	 512 -> I not 0			=> calibrate ADC only
 //	1024 -> I mismatch		=> check components
 //	2048 -> Unstable HV		=> check components
+//	4096 -> Broken ADC		=> check components
 
 class FzTest {
 public:
@@ -105,7 +107,7 @@ private:
 	bool fTested,fCalib,fVerb;
 	FzSC *sock,*ksock;
 	int blk,fee;
-	int failmask;
+	int failmask,adcmask;
 	
 	//FEE data
 	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],dacoff[6],dcreact[6],hvmask,V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];

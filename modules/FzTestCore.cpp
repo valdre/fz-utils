@@ -64,6 +64,7 @@ void FzTest::Init() {
 		Vp0[c]=-99; Vp1[c]=-99; Ip0[c]=-99; Ip1[c]=-99;
 	}
 	failmask=0;
+	adcmask=0;
 	return;
 }
 
@@ -519,7 +520,7 @@ int FzTest::ApplyHV(const int c,const int V) {
 		if(tmp==1) break;
 	}
 	if(i==50) return -20;
-	if(!fVerb) printf(UP GRN "ApplyHV " Mag " %s-%s" NRM " reached target voltage: %3d V\n",lChan[c%2],lFPGA[c/2],V);
+	if(!fVerb) printf(UP GRN "ApplyHV " Mag " %s-%s" NRM " reached target voltage :                       %3d  V\n",lChan[c%2],lFPGA[c/2],V);
 	return 0;
 }
 
@@ -596,7 +597,7 @@ int FzTest::IVmeas(const int c,int *V,int *Vvar,int *I,bool wait) {
 	
 	if(I==nullptr) wait=false;
 	if(wait) {
-		if(!fVerb) printf(BLD "IVmeas  " Mag " %s-%s" NRM " waiting for current stabilization\n",lChan[c%2],lFPGA[c/2]);
+		if(!fVerb) printf(BLD "IVmeas  " Mag " %s-%s" NRM " waiting for I stabilization...\n",lChan[c%2],lFPGA[c/2]);
 		sleep(2);
 	}
 	else printf("\n");
@@ -609,7 +610,7 @@ int FzTest::IVmeas(const int c,int *V,int *Vvar,int *I,bool wait) {
 		ret=sscanf((char *)reply,"0|%d",&Itmp);
 		if(ret!=1) return -20;
 		if(!wait) break;
-		if(!fVerb) printf(UP BLD "IVmeas  " Mag " %s-%s" NRM " waiting for current stabilization: " BLD "%5d" NRM " nA\n",lChan[c%2],lFPGA[c/2],Itmp);
+		if(!fVerb) printf(UP BLD "IVmeas  " Mag " %s-%s" NRM " waiting for I stabilization:                           " BLD "%5d" NRM " nA\n",lChan[c%2],lFPGA[c/2],Itmp);
 		if(old>=0) {
 			dir=((Itmp==old)?dir:((Itmp>old)?1:-1));
 			if(oldir!=0 && oldir!=dir) Nch++;
@@ -666,7 +667,7 @@ int FzTest::ManyIVmeas(const int testmask,int *V,int *Vvar,int *I,bool wait) {
 	
 	if(I==nullptr) wait=false;
 	if(wait) {
-		if(!fVerb) printf(BLD "MIVmeas    waiting for I stabilization\n");
+		if(!fVerb) printf(BLD "MIVmeas " NRM "   waiting for I stabilization\n");
 		sleep(2);
 	}
 	else printf("\n");
@@ -685,7 +686,7 @@ int FzTest::ManyIVmeas(const int testmask,int *V,int *Vvar,int *I,bool wait) {
 		//Break after the reading. Current must be read before!
 		if(!wait) break;
 		if(!fVerb) {
-			printf(UP BLD "MIVmeas    waiting for I stabilization:");
+			printf(UP BLD "MIVmeas " NRM "   waiting for I stabilization:");
 			for(c=0;c<4;c++) {
 				if((testmask&(1<<c))==0) printf("     ----");
 				else printf(BLD " %5d" NRM " nA",Itmp[c]);

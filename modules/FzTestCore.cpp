@@ -62,6 +62,7 @@ void FzTest::Init() {
 		V20[c]=-1; V20var[c]=-1; Vfull[c]=-1; Vfullvar[c]=-1; Ifull[c]=-1; I1000[c]=-1;
 		for(int i=0;i<41;i++) {Vkei[c][i]=-1; Vdac[c][i]=-1; Vadc[c][i]=-1; Iadc[c][i]=-1;}
 		Vp0[c]=-99; Vp1[c]=-99; Ip0[c]=-99; Ip1[c]=-99;
+		tcal[c]=-1;
 	}
 	failmask=0;
 	adcmask=0;
@@ -284,9 +285,10 @@ int FzTest::LVHVtest() {
 //HV functions
 //Calibration of a specific HV channel
 int FzTest::HVcalChan(const int c,const int max,const bool dac) {
-	int N=0,i,ret,Vtarg,Vvar,maxvar,dau,oldau=-1,dacadr,isamadr;
+	int N=0,i,ret,Vtarg,Vset,Vvar,maxvar,dau,oldau=-1,dacadr,isamadr;
 	double VKvar,lastV[2]={0,0},lastD[2]={0,0},bakV,bakD;
 	const int cdisc[4]={0,2,1,3};
+	struct timeval ti,tf,dt;
 	
 	switch(c) {
 		case 0:  dacadr=82;         isamadr=376; break;
@@ -302,24 +304,52 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	hvmask&=(~(1<<c));
 	
 	if(dac) {
-		//Check polarity
-		if((ret=SetDAC(c,500))<0) return ret; //around 3.6V for Si1 and 5.9V for Si2
-		//Wait for tension to go up
-		usleep(500000);
-		if((N=GetVoltage(nullptr,nullptr,false))<0) return ret;
-	}
-	//Force 0V to DAC output
-	if((ret=SetDAC(c,0))<0) return ret;
-	if(dac) {
-		if(N) {
-			printf(YEL "HVcalib " NRM " Inverted probe! Swap the connectors on Keithley and press enter to continue...");
-			for(;getchar()!='\n';);
+		//Check polarity and wire connection
+		for(;;) {
+			if((ret=SetDAC(c,500))<0) return ret; //around 3.7V for Si1 and 6.0V for Si2
+			//Wait for tension to go up
+			usleep(500000);
+			if((N=GetVoltage(&bakV,nullptr,false))<0) return ret;
+			//Return to 0V
+			if((ret=SetDAC(c,0))<0) return ret;
+			i=0;
+			if(bakV<2) {
+				printf(YEL "HVcalib " NRM " No voltage measured. Please check soldering...");
+				i=1;
+			}
+			else if(N) {
+				printf(YEL "HVcalib " NRM " Inverted probe. Please swap the connectors on Keithley...");
+				i=1;
+			}
+			if(i) {
+				printf("\nUser action required: what do you want to do?\n");
+				printf("    1) Wiring fixed. Go on!\n");
+				printf("    0) Skip this HV channel\n");
+				printf("[default=1]> ");
+				
+				ret=getchar();
+				if(ret=='\n') ret=0x31;
+				else {
+					for(;getchar()!='\n';);
+				}
+				if(ret!=0x31) goto bad;
+			}
+			else break;
 		}
-		
+	}
+	else {
+		//Force 0V to DAC output also when dac=false
+		if((ret=SetDAC(c,0))<0) return ret;
+	}
+	//Measure time from here
+	gettimeofday(&ti,NULL);
+	//Wait capacitors discharge
+	sleep(1);
+	if(dac) {
 		//Check Keithley at 0V (waiting for voltage stability)
 		Vdac[c][0]=0;
 		if((ret=GetVoltage(Vkei[c],nullptr,true))<0) return ret;
-		if(Vkei[c][0]>=5) {
+		if(Vkei[c][0]>=1) {
 			printf(YEL "HVcalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,Vkei[c][0],lChan[c%2],lFPGA[c/2]);
 			goto bad;
 		}
@@ -336,19 +366,22 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	
 	//Calibration points every 10V
 	for(Vtarg=10,N=1;Vtarg<=max;Vtarg+=10,N++) {
-		printf("\n\n" CYA "HVcalib " BLD "***** NEW TARGET VOLTAGE => %3d V *****\n",Vtarg);
+		printf("\n" CYA "HVcalib " BLD "***** NEW TARGET VOLTAGE => %3d V *****\n",Vtarg);
 		if(dac) {
 			//DAC CALIBRATION!
 			bakV=lastV[1]; bakD=lastD[1];
 			for(i=0;i<20;i++) {
+				//First set 1V more to have a faster current stabilization
+				if(i==0) Vset=Vtarg+1;
+				else Vset=Vtarg;
 				//First point: guess
 				if(fabs(lastV[1]-lastV[0])<0.001) {
-					dau=V2D[c%2]*Vtarg;
+					dau=V2D[c%2]*Vset;
 					if(i==0) printf(CYA "HVcalib " NRM " guessing first DAC value...\n");
 				}
 				//Then: linear extrapolation
 				else {
-					dau=(int)(0.5+lastD[0]+(((double)Vtarg)-lastV[0])*(lastD[1]-lastD[0])/(lastV[1]-lastV[0]));
+					dau=(int)(0.5+lastD[0]+(((double)Vset)-lastV[0])*(lastD[1]-lastD[0])/(lastV[1]-lastV[0]));
 					if(i==0) printf(CYA "HVcalib " NRM " extrapolating from (%3.0f V: %5.0f), (%3.0f V: %5.0f)\n",lastV[0],lastD[0],lastV[1],lastD[1]);
 				}
 				
@@ -356,11 +389,11 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 				oldau=dau;
 				if((ret=GetVoltage(Vkei[c]+N,&VKvar,true))<0) goto err;
 				if(VKvar>=1) {
-					printf(YEL "HVcalib " NRM " unstable HV: Vtarg=%d, VKeith=%.3f, DVKeith=%.3f\n",Vtarg,Vkei[c][N],VKvar);
+					printf(YEL "HVcalib " NRM " unstable HV: Vset=%d, VKeith=%.3f, DVKeith=%.3f\n",Vset,Vkei[c][N],VKvar);
 					goto bad;
 				}
-				if(fabs(Vkei[c][N]-(double)Vtarg)>5) {
-					printf(YEL "HVcalib " NRM " unexpected HV meas.: Vtarg=%d, VKeith=%.3f, DVKeith=%.3f\n",Vtarg,Vkei[c][N],VKvar);
+				if(fabs(Vkei[c][N]-(double)Vset)>5) {
+					printf(YEL "HVcalib " NRM " unexpected HV meas.: Vset=%d, VKeith=%.3f, DVKeith=%.3f\n",Vset,Vkei[c][N],VKvar);
 					goto bad;
 				}
 				printf(CYA "HVcalib " Mag " %s-%s " NRM "       DAC set to %5d => VKeith = " BLD "%7.3f\n" NRM,lChan[c%2],lFPGA[c/2],dau,Vkei[c][N]);
@@ -368,9 +401,9 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 				lastV[0]=lastV[1];   lastD[0]=lastD[1];
 				lastV[1]=Vkei[c][N]; lastD[1]=(double)dau;
 				
-				if(fabs(Vkei[c][N]-(double)Vtarg)<0.005) break;
-				if(fabs(Vkei[c][N]-lastV[0])<0.005) break;
-				if(abs(dau-(int)(lastD[0]))<10) break;
+				if(fabs(Vkei[c][N]-(double)Vtarg)<1./((double)V2D[c%2])) break;
+				if((abs(dau-(int)(lastD[0]))<10) && fabs(Vkei[c][N]-(double)Vtarg)<0.1) break;
+// 				if(fabs(Vkei[c][N]-lastV[0])<0.05) break; //pleonastic!
 			}
 			if(i>=20 || fabs(Vkei[c][N]-(double)Vtarg)>=0.1) {
 				printf(YEL "HVcalib " NRM " unable to reach target voltage!\n");
@@ -471,9 +504,16 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	for(i=0;i<4;i++) if((ret=WriteCell(17+c*9+i,SELBYTE(cBI,i)))<0) return ret;
 	if((ret=WriteCell(21+c*9,sgI))<0) return ret;
 	
-	//Mark the channel as calibrated and exit!
+	//Mark the channel as calibrated
 	if((ret=WriteCell(50+c,0x38))<0) return ret;
 	hvmask|=(1<<c);
+	
+	//Calculate time needed to calibrate one channel
+	gettimeofday(&tf,NULL);
+	timersub(&tf,&ti,&dt);
+	bakD=(double)(dt.tv_sec)+((double)(dt.tv_usec))*1.e-6;
+	tcal[c]=(int)(bakD+0.5);
+	printf(GRN "HVcalib " Mag " %s-%s " NRM "  calibration terminated in %2dm%02ds\n",lChan[c%2],lFPGA[c/2],tcal[c]/60,tcal[c]%60);
 	return 0;
 	
 	err: //ERROR: exit from everything
@@ -770,11 +810,11 @@ int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
 	double av;
 	
 	if(!fVerb) printf(BLD "IVADC   " Mag " %s-%s" NRM " waiting for current stabilization\n",lChan[c%2],lFPGA[c/2]);
-	sleep(1);
+	sleep(2);
 	//30s timeout for current stabilization
 	sprintf(query,"%d",c);
-	for(int i=0;i<30;i++) {
-		sleep(1);
+	for(int i=0;i<60;i++) {
+		usleep(500000);
 		if((ret=sock->Send(blk,fee,0x8F,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&tmp);
 		if(ret!=1) return -20;
@@ -782,10 +822,10 @@ int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
 		if(old>=0) {
 			dir=((tmp==old)?dir:((tmp>old)?1:-1));
 			if(oldir!=0 && oldir!=dir) Nch++;
-			if(abs(tmp-old)<=50) Nstab++;
+			if(abs(tmp-old)<=5) Nstab++;
 			else Nstab=0;
-			//exit after 4 changes of direction or 4 stable readings (Nstab==3) in a row
-			if(Nch==4 || Nstab==3) break;
+			//exit after 3 changes of direction or 4 stable readings (Nstab==3) in a row
+			if(Nch==3 || Nstab==3) break;
 		}
 		oldir=dir;
 		old=tmp;

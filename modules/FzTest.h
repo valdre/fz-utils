@@ -19,9 +19,6 @@
 #define LASTVFPGA  "19/09/2019"
 //HV ramp (in V/s)
 #define HVRAMP 20
-//DAC units per Volt (typical value)
-#define DACVSI1 140
-#define DACVSI2  85
 //Select byte
 #define SELBYTE(X,I) (((unsigned long int)X>>(8*I))&0xFF)
 
@@ -38,13 +35,13 @@ static const float vref[19]={5000,5000,2500,2000,2000,2000,2000,3700,3000,3000,3
 static const char lvnotes[19][15]={"From VP12_0","From VP12_0","From VP5_5_IN","From VM27","From VM27","From VM27","From VM27","From VP5_5_IN","From VP37","From VP37","From VP37","From VP37","From VP37","From VP37","From VP5_5_IN","From VP25","From VP25","From VP25","From VP25"};
 //Offset constants
 static const float blref3[6]={-7400,-5650,-4500,-7400,-5650,-7400};
-static const float blref5[6]={-7400,-5100,-6150,-7400,-4250,-7400};
+static const float blref5[6]={-7400,-5100,-5700,-7400,-4250,-7400};
 static const float bltoll[6]={ 0.02,  0.1,  0.1, 0.02,  0.1, 0.02};
 static const float blvtol[6]={   20,  200,  200,   20,  200,   20};
 //HV constants:                Si1     Si2
 static const int maxhv3[2]={    200,    350};
 static const int maxhv4[2]={    300,    400};
-static const int    V2D[2]={DACVSI1,DACVSI2};
+static const int    V2D[2]={    140,     85}; //DAC units per Volt (typical value)
 
 //Fails:
 //	   1 -> Overheat		=> check cooling
@@ -107,7 +104,7 @@ private:
 	bool fTested,fCalib,fVerb;
 	FzSC *sock,*ksock;
 	int blk,fee;
-	int failmask,adcmask;
+	int failmask,adcmask,tcal[4];
 	
 	//FEE data
 	int v4,sn,temp[6],lv[19],gomask,bl[12],blvar[12],dacoff[6],dcreact[6],hvmask,V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];

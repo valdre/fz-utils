@@ -354,21 +354,21 @@ int FzTest::Guided() {
 	}
 	
 	if(failmask&1) {
-		printf("Card temperature is high. Please check cooling and restart the test...\n\n");
+		printf("\nCard temperature is high. Please check cooling and restart the test...\n\n");
 		return 0;
 	}
 	if(failmask) {
-		printf("Some issues have been detected. What do you want to do?\n");
+		printf("\nSome issues have been detected. What do you want to do?\n");
 		printf("    1) Guided resolution\n");
 		printf("    2) Manual resolution (operation menu)\n");
-		printf("    0) Quit\n\n");
+		printf("    0) Quit\n");
 		printf("> "); scanf("%d",&ret); getchar();
 		if((ret<0)||(ret>2)) ret=0;
 	}
 	else {
-		printf("The FEE is fully functional! What do you want to do?\n");
+		printf("\nThe FEE is fully functional! What do you want to do?\n");
 		printf("    1) Operation menu\n");
-		printf("    0) Quit\n\n");
+		printf("    0) Quit\n");
 		printf("> "); scanf("%d",&ret); getchar();
 		if(ret==1) ret=2;
 		else ret=0;
@@ -377,18 +377,18 @@ int FzTest::Guided() {
 	if(ret==0) return 0;
 	if(ret==1) {
 		if(failmask&4) {
-			printf("Card firmwares are obsolete. What do you want to do?\n");
+			printf("\nCard firmwares are obsolete. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure, reload new fw and restart the test\n\n");
+			printf("    0) Quit the procedure, reload new fw and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N!=1) N=0;
 			if(N==0) return 0;
 		}
 		if(failmask&2) {
-			printf("Card SN is not set. What do you want to do?\n");
+			printf("\nCard SN is not set. What do you want to do?\n");
 			printf("    pos) Write new SN and press enter\n");
 			printf("    neg) Ignore and go on\n");
-			printf("     0 ) Quit the procedure\n\n");
+			printf("     0 ) Quit the procedure\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N==0) return 0;
 			if(N>0) {
@@ -396,26 +396,26 @@ int FzTest::Guided() {
 			}
 		}
 		if(failmask&8) {
-			printf("Low voltages are out of range. What do you want to do?\n");
+			printf("\nLow voltages are out of range. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N!=1) N=0;
 			if(N==0) return 0;
 		}
 		if(failmask&16) {
-			printf("Some pre-amps are broken. What do you want to do?\n");
+			printf("\nSome pre-amps are broken. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N!=1) N=0;
 			if(N==0) return 0;
 		}
 		if(failmask&32) {
-			printf("Some offsets are out of range. What do you want to do?\n");
+			printf("\nSome offsets are out of range. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    2) Try to auto-calibrate DC levels\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N<0||N>2) N=0;
 			if(N==0) return 0;
@@ -424,7 +424,7 @@ int FzTest::Guided() {
 			}
 		}
 		if(failmask&4096) {
-			printf("One or more ADCs are broken (");
+			printf("\nOne or more ADCs are broken (");
 			N=0; ret=0;
 			for(int c=0;c<6;c++) if(adcmask&(1<<c)) N++;
 			for(int c=0;c<6;c++) {
@@ -435,16 +435,16 @@ int FzTest::Guided() {
 			}
 			printf("). What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N!=1) N=0;
 			if(N==0) return 0;
 		}
 		if(failmask&64) {
-			printf("Some HV channels are not calibrated. What do you want to do?\n");
+			printf("\nSome HV channels are not calibrated. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    2) Perform HV calibration procedure\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N<0||N>2) N=0;
 			if(N==0) return 0;
@@ -454,18 +454,18 @@ int FzTest::Guided() {
 			}
 		}
 		if(failmask&128) {
-			printf("HV was not tested. What do you want to do?\n");
+			printf("\nHV was not tested. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure and restart the test with \"-H\" option\n\n");
+			printf("    0) Quit the procedure and restart the test with \"-H\" option\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N<0||N>1) N=0;
 			if(N==0) return 0;
 		}
 		if(failmask&256) {
-			printf("Measured voltage is inconsistent with applied voltage. What do you want to do?\n");
+			printf("\nMeasured voltage is inconsistent with applied voltage. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    2) Perform HV calibration procedure (ADC only)\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N<0||N>2) N=0;
 			if(N==0) return 0;
@@ -475,10 +475,10 @@ int FzTest::Guided() {
 			}
 		}
 		if(failmask&512) {
-			printf("Measured current is not 0 without load. What do you want to do?\n");
+			printf("\nMeasured current is not 0 without load. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    2) Perform HV calibration procedure (ADC only)\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N<0||N>2) N=0;
 			if(N==0) return 0;
@@ -488,17 +488,17 @@ int FzTest::Guided() {
 			}
 		}
 		if(failmask&1024) {
-			printf("Measured current is inconsistent with Ohm's law. What do you want to do?\n");
+			printf("\nMeasured current is inconsistent with Ohm's law. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N<0||N>1) N=0;
 			if(N==0) return 0;
 		}
 		if(failmask&2048) {
-			printf("HV is unstable and/or maximum voltage cannot be reached. What do you want to do?\n");
+			printf("\nHV is unstable and/or maximum voltage cannot be reached. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure, check components and restart the test\n\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("> "); scanf("%d",&N); getchar();
 			if(N<0||N>1) N=0;
 			if(N==0) return 0;
@@ -513,7 +513,7 @@ int FzTest::Manual() {
 	int tmp,ret,N;
 	
 	if(failmask&1) {
-		printf("Card temperature is high. Please check cooling and restart the test...\n\n");
+		printf("\nCard temperature is high. Please check cooling and restart the test...\n\n");
 		return 0;
 	}
 	do {
@@ -527,7 +527,7 @@ int FzTest::Manual() {
 		else printf("    8) Perform the fast test\n");
 		if(fTested) printf("    9) Repeat the fast test with HV check\n");
 		else printf("    9) Perform the fast test with HV check\n");
-		printf("    0) Quit\n\n");
+		printf("    0) Quit\n");
 		printf("> "); scanf("%d",&tmp); getchar();
 		if((tmp>9)||(tmp<0)) tmp=0;
 		switch(tmp) {
@@ -564,9 +564,7 @@ int FzTest::OffCal() {
 	uint8_t reply[MLENG];
 	int finaldac[6];
 	
-	if(!fTested) printf(YEL "OffCal  " NRM " fast test was not performed. Performing offset check only...\n");
-	
-	printf("Target baseline [-7400]>");
+	printf("\nTarget baseline [-7400]>");
 	for(c=0;c<SLENG-1;c++) {
 		ctmp=getchar();
 		if(ctmp=='\n') break;
@@ -583,28 +581,13 @@ int FzTest::OffCal() {
 	}
 	for(c=0;c<6;c++) {
 		ch=c2ch[c];
-		if(!fTested) {
-			if((ret=OffCheck(ch))<0) return ret;
-		}
 		//Reading original DAC value
 		sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+4);
 		if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&dac);
 		if(ret!=1) return -20;
-		
 		finaldac[c]=dac;
-		if(bl[ch]>=8100 || bl[ch]<=-8100) {
-			printf(YEL "OffCal  " NRM " %s-%s: saturating baseline\n",lADC[ch%6],lFPGA[ch/6]);
-			continue;
-		}
-		if(blvar[ch]>blvtol[ch%6]) {
-			printf(YEL "OffCal  " NRM " %s-%s: unstable DC level\n",lADC[ch%6],lFPGA[ch/6]);
-			continue;
-		}
-		if(dcreact[c]<1000) {
-			printf(YEL "OffCal  " NRM " %s-%s: DC level is not responsive\n",lADC[ch%6],lFPGA[ch/6]);
-			continue;
-		}
+		
 		//Usually DAC should be around 700 but I prefer to start from lower values to avoid BL underflow
 		dac1=200; dac2=400;
 		//Try DAC=200 and check bl
@@ -617,6 +600,21 @@ int FzTest::OffCal() {
 		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
 		usleep(1000);
 		if((ret=BLmeas(ch,5,&bl2,nullptr))<0) return ret;
+		//Always check stability!
+		if((ret=OffCheck(ch))<0) return ret;
+		if(bl[ch]>=8100 || bl[ch]<=-8100) {
+			printf(YEL "OffCal  " NRM " %s-%s: saturating baseline\n",lADC[ch%6],lFPGA[ch/6]);
+			continue;
+		}
+		if(blvar[ch]>5*blvtol[ch%6]) {
+			printf(YEL "OffCal  " NRM " %s-%s: unstable DC level\n",lADC[ch%6],lFPGA[ch/6]);
+			continue;
+		}
+		if(dcreact[c]<1000) {
+			printf(YEL "OffCal  " NRM " %s-%s: DC level is not responsive\n",lADC[ch%6],lFPGA[ch/6]);
+			continue;
+		}
+		//Fast search procedure
 		ierr=0; Bl=10000;
 		for(i=0;;i++) {
 			if(bl1<=bl2) {
@@ -704,7 +702,7 @@ int FzTest::OffCurve() {
 
 //Offset manual test
 int FzTest::OffManual() {
-	int ch,c=-1,ret;
+	int ch,c,ret;
 	int old,dac,base;
 	char query[SLENG];
 	uint8_t reply[MLENG];
@@ -716,10 +714,13 @@ int FzTest::OffManual() {
 	printf("    3) QH1-B\n");
 	printf("    4)  Q2-B\n");
 	printf("    5)  Q3-B\n");
-	printf("    anything else) nothing, quit this procedure!\n");
-	printf("> "); scanf("%d",&c); getchar();
-	if(c<0 || c>5) return 0;
-	ch=c2ch[c];
+	printf("[default=quit]> ");
+	c=getchar();
+	if(c!='\n') {
+		for(;getchar()!='\n';);
+	}
+	if(c<0x30 || c>0x35) return 0;
+	c-=0x30; ch=c2ch[c];
 	
 	if((ret=BLmeas(ch,3,nullptr,nullptr))<0) return ret;
 	if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) return 0;
@@ -774,7 +775,7 @@ int FzTest::HVtest() {
 		}
 	}
 	if(testmask==0) return 0;
-	printf("Ready to test, HV will be applyed. Press enter to continue..."); getchar();
+	printf("\nReady to test, HV will be applyed. Press enter to continue..."); getchar();
 	
 	//Set max voltage
 	for(c=0;c<4;c++) {
@@ -793,7 +794,7 @@ int FzTest::HVtest() {
 	for(c=0;c<4;c++) {
 		if(abs(V20[c]-20)>2 || V20var[c]>5) {
 			if((ret=ApplyHV(c,0))<0) goto err;
-			testmask=testmask&(15-(1<<c));
+			testmask&=(~(1<<c));
 		}
 	}
 	
@@ -809,12 +810,12 @@ int FzTest::HVtest() {
 	for(c=0;c<4;c++) {
 		if((testmask&(1<<c))==0) continue;
 		if(abs(Vfull[c]-max[c])>20 || Vfullvar[c]>5) {
-			testmask=testmask&(15-(1<<c));
+			testmask&=(~(1<<c));
 		}
 	}
 	
 	//Test current
-	printf("Test all channels simultaneously with 100 MOhm loads (HV will be applyed) [Y/n]> ");
+	printf("\nTest all channels simultaneously with 100 MOhm loads (HV will be applyed) [Y/n]> ");
 	ret=getchar();
 	if(ret!='\n') {
 		for(;getchar()!='\n';);
@@ -834,9 +835,9 @@ int FzTest::HVtest() {
 	else {
 		for(c=0;c<4;c++) {
 			if((testmask&(1<<c))==0) continue;
-			printf("Ready to check" Mag " %s-%s " NRM "I measurement. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
+			printf("\nReady to check" Mag " %s-%s " NRM "I measurement. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
 			printf("  pos) Plug the load and type its res. in MOhm\n");
-			printf("  neg) Skip the I measurement\n\n");
+			printf("  neg) Skip the I measurement\n");
 			printf("> "); scanf("%lf",&R); getchar();
 			if(R<0) continue;
 			if(R>200) {
@@ -869,7 +870,7 @@ int FzTest::HVcalib() {
 	
 	for(c=0;c<4;c++) {
 		if(hvmask&(1<<c)) printf("\n %s-%s" NRM " is already calibrated. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
-		else printf("Ready to calibrate" Mag " %s-%s " NRM "HV channel. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
+		else printf("\nReady to calibrate" Mag " %s-%s " NRM "HV channel. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
 		printf("    1) Go on (HV will be applied, Keithley probe must be soldered before going on)!\n");
 		if(hvmask&(1<<c)) printf("    2) Calibrate ADC only (HV will be applied, but Keithley is not needed)\n");
 		printf("    3) Skip this channel\n");
@@ -914,7 +915,11 @@ int FzTest::HVcalib() {
 		if((ret=HVcalChan(c,max,dac))<0) return ret;
 		fCalib=true;
 	}
-	printf(GRN "HVcalib " NRM " calibration terminated. " BLD "Please restart the card before applying HV!\n" NRM);
+	max=0;
+	for(c=0;c<4;c++) {
+		if(tcal[c]>=0) max+=tcal[c];
+	}
+	printf(GRN "HVcalib " NRM " overall calibration terminated in %2dm%02ds. " BLD "Please restart the card before applying HV!\n" NRM,max/60,max%60);
 	return 0;
 }
 
@@ -925,8 +930,7 @@ void FzTest::UpdateDB() {
 	struct stat st;
 	uint8_t reply[MLENG];
 	
-	
-	printf("Test ended. Do you want to update the FEE database [Y/n]? ");
+	printf("\nTest ended. Do you want to update the FEE database [Y/n]? ");
 	chr=getchar();
 	if(chr!='\n') {
 		for(;getchar()!='\n';);
@@ -942,7 +946,7 @@ void FzTest::UpdateDB() {
 		if(N>0) sn=N;
 	}
 	if(sn<=0 || sn>=65535) {
-		printf("SN is not defined! Type a valid SN (1-65534)>");
+		printf("\nSN is not defined! Type a valid SN (1-65534)>");
 		scanf("%d",&N); getchar();
 		if(N<=0 || N>=65535) return;
 		SetSN(N);

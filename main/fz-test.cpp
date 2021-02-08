@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/12/2020                          *
+*                         Simone Valdre' - 08/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -9,11 +9,11 @@
 
 int main(int argc, char *argv[]) {
 	int c,ret,tmp,blk=0,fee=0,dump=0;
-	bool verb=false,serial=true,keith=false,autom=true,hv=false;
+	bool verb=false,serial=true,keith=false,autom=true,power=false,hv=false;
 	char device[SLENG]="/dev/ttyUSB0",kdevice[SLENG]="/dev/ttyUSB1",hname[SLENG]="regboard0",romfile[MLENG]="";
 	
 	//Decode options
-	while((c=getopt(argc,argv,"hvmud:n:k:b:f:Hr:w:"))!=-1) {
+	while((c=getopt(argc,argv,"hvmPud:n:k:b:f:Hr:w:"))!=-1) {
 		switch(c) {
 			case 'v':
 				verb=true;
@@ -23,6 +23,9 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'm':
 				autom=false;
+				break;
+			case 'P':
+				power=true;
 				break;
 			case 'd':
 				if(optarg!=NULL && strlen(optarg)<SLENG) strcpy(device,optarg);
@@ -52,11 +55,12 @@ int main(int argc, char *argv[]) {
 				dump=-1;
 				break;
 			case 'h': default:
-				if(c!='h') printf(YEL "fz-test " NRM ": Unrecognized option\n");
+				if(c!='h') printf(YEL "fz-test " NRM " Unrecognized option\n");
 				printf("\n**********  HELP **********\n");
 				printf("    -h         this help\n");
 				printf("    -v         enable verbose output\n");
 				printf("    -m         manual operation (skip automatic checks)\n");
+				printf("    -P         power on FEEs (necessary when using block configuration)\n");
 				printf("    -u         use UDP protocol (via RB) [by default direct RS232 is used]\n");
 				printf("    -d <dev>   specify the FEE serial device (used only without UDP) [default: /dev/ttyUSB0]\n");
 				printf("    -n <dev>   specify the RB hostname (used only with UDP) [default: regboard0]\n");
@@ -88,9 +92,21 @@ int main(int argc, char *argv[]) {
 	FzTest test(&sock,blk,fee,verb);
 	if(ksock!=nullptr) test.KeithleySetup(ksock);
 	
+	if(power) {
+		uint8_t reply[MLENG];
+		if((ret=sock.Send(blk,8,0x83,"",reply,verb))) goto err;
+		if(strcmp((char *)reply,"0|")) {
+			printf(RED "fz-test " NRM " FEE power on failed\n");
+			ret=-20; goto err;
+		}
+		printf(BLD "fz-test " NRM " Waiting 10s for power on...\n");
+		sleep(10);
+		printf(UP GRN "fz-test " NRM " FEEs powered on...          \n");
+	}
+	
 	if(dump) {
 		if(strlen(romfile)<=0) {
-			printf(RED "fz-test " NRM "empty file name!\n");
+			printf(RED "fz-test " NRM " empty file name!\n");
 			return -1;
 		}
 		if(dump>0) {
@@ -112,15 +128,28 @@ int main(int argc, char *argv[]) {
 	
 	err:
 	switch(ret) {
-		case -1: printf(RED "fz-test " NRM "many timeouts occurred, check FEE geo number or RS232 connection\n"); break;
+		case -1: printf(RED "fz-test " NRM " many timeouts occurred, check FEE geo number or RS232 connection\n"); break;
 		case -2: case -3: case -4: case -5:
-			printf(RED "fz-test " NRM "FEE is connected but many errors occurred (%d), check RS232 connection\n",ret); break;
-		case -10: printf(RED "fz-test " NRM "device is not ready (check the software)\n"); break;
-		case -20: printf(RED "fz-test " NRM "anomalous SC replies (check the software and/or the firmware)\n"); break;
-		default: printf(RED "fz-test " NRM "unhandled error...\n");
+			printf(RED "fz-test " NRM " FEE is connected but many errors occurred (%d), check RS232 connection\n",ret); break;
+		case -10: printf(RED "fz-test " NRM " device is not ready (check the software)\n"); break;
+		case -20: printf(RED "fz-test " NRM " anomalous SC replies (check the software and/or the firmware)\n"); break;
+		default: printf(RED "fz-test " NRM " unhandled error...\n");
 	}
 	
 	ending:
 	test.UpdateDB();
+	
+	if(power) {
+		uint8_t reply[MLENG];
+		if((ret=sock.Send(blk,8,0x84,"",reply,verb))) {
+			printf(RED "fz-test " NRM " FEE power off failed (send error)\n");
+			return 0;
+		}
+		if(strcmp((char *)reply,"0|")) {
+			printf(RED "fz-test " NRM " FEE power off failed (bad reply)\n");
+			return 0;
+		}
+	}
+	
 	return 0;
 }

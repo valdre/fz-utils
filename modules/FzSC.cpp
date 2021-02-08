@@ -259,6 +259,8 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 	//CRC
 	crc2ascii(crc,answer+N);
 	N+=2;
+	//Newline (sent only via RS232)
+	answer[N]=0x0A;
 	//Consistency check and construction of human readable message
 	if(SCParse(intmess,answer,N)) {
 		printf(RED "FzSC::Send" NRM " query construction failed\n");
@@ -269,11 +271,11 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 	//Loop for 3 query attempts
 	for(tent=0;tent<MAXAT;tent++) {
 		//Send SC query and store the time
-		if(fSerial) ret=write(sockfd,answer,N);
+		if(fSerial) ret=write(sockfd,answer,N+1);
 		else ret=sendto(sockfd,(void *)answer,N,0,(struct sockaddr *)&sock_to,sizeof(struct sockaddr));
-		if(ret!=N) {err=-10; break;}
+		if(ret!=(fSerial?N+1:N)) {err=-10; break;}
 		gettimeofday(&tstart,NULL);
-		M=0; err=0; j=-1;
+		M=0; err=0; j=-99;
 		//In case of RS232 Wait at least 5ms (no data arrive before)
 		if(fSerial) usleep(5000);
 		for(;;) {
@@ -288,9 +290,13 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 			trep=1000000*delta.tv_sec+delta.tv_usec;
 			//Putting together the pieces
 			for(i=0;i<ret;i++) {
-				reply[M+i]=part[i];
-				if(part[i]==3) j=2; //After ETX (0x03) two more bytes are expected (CRC)
-				else j--;
+				//If there is a newline at the end it must be ignored
+				if(j==0 && part[i]==0x0A) ret--;
+				else {
+					reply[M+i]=part[i];
+					if(part[i]==3) j=2; //After ETX (0x03) two more bytes are expected (CRC), but a newline char may arrive!
+					else j--;
+				}
 			}
 			M+=ret;
 			if(j==0) {reply[M]=(uint8_t)'\0'; break;} //Message concluded

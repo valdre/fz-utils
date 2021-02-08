@@ -49,7 +49,7 @@ int FzTest::FastTest(bool hv) {
 	
 	//Get LV values and HV calibration status
 	if(!fVerb) printf(BLD "FastTest" NRM " getting low voltages, card version and HV calibration status\n");
-	if((ret=LVHVtest())<0) return ret;
+	if((ret=LVHVTest())<0) return ret;
 	if(!fVerb) printf(UP GRN "FastTest" NRM " getting low voltages, card version and HV calibration status\n");
 	
 	//Test pre-amp
@@ -75,7 +75,7 @@ int FzTest::FastTest(bool hv) {
 	//HV test (no calibration)
 	if(hv) {
 		if(!fVerb) printf(BLD "FastTest" NRM " testing HV quality\n");
-		if((ret=HVtest())<0) return ret;
+		if((ret=HVTest())<0) return ret;
 	}
 	return 0;
 }
@@ -219,7 +219,7 @@ void FzTest::Report() {
 		if(bl[c]<-8500) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
 		else {
 			ref=(v4)?blref5[c%6]:blref3[c%6];
-			if((fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])) {
+			if((fabs(ref-(double)(bl[c]))>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])) {
 				if((adcmask&(1<<(ch2c[c])))==0 || c==1 || c==2 || c==4 || c==7 || c==8 || c==10) failmask|=32;
 				printf(RED "Fail" NRM);
 			}
@@ -229,9 +229,9 @@ void FzTest::Report() {
 			else {
 				if(blvar[c]>=blvtol[c%6]) {
 					printf(" Unstable");
-					if(fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6]) printf(" -");
+					if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) printf(" -");
 				}
-				if(fabs((ref-(double)(bl[c]))/ref)>=bltoll[c%6]) printf(" Bad level");
+				if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) printf(" Bad level");
 			}
 			printf("\n");
 		}
@@ -243,19 +243,19 @@ void FzTest::Report() {
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
 		if(dacoff[c]<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
 		else {
-			if((dacoff[c]<500) || (dacoff[c]>900) || (dcreact[c]<1000)) {
+			if((dacoff[c]<600) || (dacoff[c]>800) || (dcreact[c]<1000)) {
 				if((adcmask&(1<<c))==0) failmask|=32;
 				printf(RED "Fail" NRM);
 			}
 			else printf(GRN "Pass" NRM);
-			printf(" % 20d % 10d",dacoff[c],700);
+			printf(" % 20d % 10d",dacoff[c],680);
 			if(adcmask&(1<<c)) printf(" Broken ADC");
 			else {
 				if(dcreact[c]<1000) {
 					printf(" Non responsive");
-					if((dacoff[c]<500) || (dacoff[c]>900)) printf(" -");
+					if((dacoff[c]<600) || (dacoff[c]>800)) printf(" -");
 				}
-				if((dacoff[c]<500) || (dacoff[c]>900)) printf(" Bad level");
+				if((dacoff[c]<600) || (dacoff[c]>800)) printf(" Bad level");
 			}
 			printf("\n");
 		}
@@ -449,7 +449,7 @@ int FzTest::Guided() {
 			if(N<0||N>2) N=0;
 			if(N==0) return 0;
 			if(N==2) {
-				if((ret=HVcalib())<0) return ret;
+				if((ret=HVCalib())<0) return ret;
 				return 0;
 			}
 		}
@@ -470,7 +470,7 @@ int FzTest::Guided() {
 			if(N<0||N>2) N=0;
 			if(N==0) return 0;
 			if(N==2) {
-				if((ret=HVcalib())<0) return ret;
+				if((ret=HVCalib())<0) return ret;
 				return 0;
 			}
 		}
@@ -483,7 +483,7 @@ int FzTest::Guided() {
 			if(N<0||N>2) N=0;
 			if(N==0) return 0;
 			if(N==2) {
-				if((ret=HVcalib())<0) return ret;
+				if((ret=HVCalib())<0) return ret;
 				return 0;
 			}
 		}
@@ -523,6 +523,8 @@ int FzTest::Manual() {
 		printf("    3) Plot offset calibration curve\n");
 		printf("    4) Offset manual test\n");
 		printf("    5) HV calibration\n");
+		printf("    6) HV manual test (not implemented)\n");
+		printf("    7) Send manual SC command (not implemented)\n");
 		if(fTested) printf("    8) Repeat the fast test\n");
 		else printf("    8) Perform the fast test\n");
 		if(fTested) printf("    9) Repeat the fast test with HV check\n");
@@ -545,12 +547,17 @@ int FzTest::Manual() {
 				if((ret=OffManual())) return ret;
 				break;
 			case 5:
-				if((ret=HVcalib())<0) return ret;
+				if((ret=HVCalib())<0) return ret;
 				tmp=0;
 				break;
+// 			case 6:
+// 				if((ret=HVManual())<0) return ret;
+// 				tmp=0;
+// 				break;
 			case 8: case 9:
 				if((ret=FastTest((tmp==8)?false:true))<0) return ret;
 				Report();
+				break;
 		}
 	}
 	while(tmp);
@@ -703,7 +710,7 @@ int FzTest::OffCurve() {
 //Offset manual test
 int FzTest::OffManual() {
 	int ch,c,ret;
-	int old,dac,base;
+	int old,dac,base,basel;
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
@@ -722,8 +729,8 @@ int FzTest::OffManual() {
 	if(c<0x30 || c>0x35) return 0;
 	c-=0x30; ch=c2ch[c];
 	
-	if((ret=BLmeas(ch,3,nullptr,nullptr))<0) return ret;
-	if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) return 0;
+// 	if((ret=BLmeas(ch,3,nullptr,nullptr))<0) return ret;
+// 	if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) return 0;
 	
 	//Store present DAC value
 	sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+4);
@@ -732,14 +739,24 @@ int FzTest::OffManual() {
 	if(ret!=1) return -20;
 	
 	for(;;) {
-		printf("DAC value [neg to stop] > "); scanf("%d",&dac); getchar();
-		if(dac<0 || dac>1023) break;
+		printf("DAC value [<0 to stop, >1023 to store] > "); scanf("%d",&dac); getchar();
+		if(dac<0) break;
+		if(dac>1023) {
+			//Writing DAC values to PIC EEPROM
+			if((ret=sock->Send(blk,fee,0x8E,"",reply,fVerb))) return ret;
+			break;
+		}
 		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,dac);
 		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
 		usleep(1000);
 		if((ret=BLmeas(ch,10,&base,nullptr))<0) return ret;
+		if(ch==0 || ch==6) {
+			if((ret=BLmeas(ch+2,10,&basel,nullptr))<0) return ret;
+		}
 		if(!fVerb) printf(UP);
-		printf("DAC = " BLD "%4d" NRM " => BL =% 6d          \n",dac,base);
+		printf("DAC = " BLD "%4d" NRM " => BL(H) = %5d",dac,base);
+		if(ch==0 || ch==6) printf(", BL(L) = %5d     \n",basel);
+		else printf("                    \n");
 	}
 	
 	//Set DAC to previous value
@@ -750,15 +767,15 @@ int FzTest::OffManual() {
 
 //HV functions
 //HV extended test
-int FzTest::HVtest() {
+int FzTest::HVTest() {
 	int c,ret,max[4]={0,0,0,0},V[4],testmask=0;
 	double R;
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	bool sim=false;
 	
-	if(!fTested) printf(YEL "HVtest  " NRM " fast test was not performed. Performing HV check only...\n");
-	if((ret=LVHVtest())<0) return ret;
+	if(!fTested) printf(YEL "HVTest  " NRM " fast test was not performed. Performing HV check only...\n");
+	if((ret=LVHVTest())<0) return ret;
 	
 	for(c=0;c<4;c++) {
 		if((hvmask&(1<<c))==0) {
@@ -859,17 +876,17 @@ int FzTest::HVtest() {
 }
 
 //HV calibration!
-int FzTest::HVcalib() {
+int FzTest::HVCalib() {
 	int c,ret,max;
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	bool dac=false;
 	
-	if(!fTested) printf(YEL "HVcalib " NRM " fast test was not performed. Performing HV check only...\n");
-	if((ret=LVHVtest())<0) return ret;
+	if(!fTested) printf(YEL "HVCalib " NRM " fast test was not performed. Performing HV check only...\n");
+	if((ret=LVHVTest())<0) return ret;
 	
 	for(c=0;c<4;c++) {
-		if(hvmask&(1<<c)) printf("\n %s-%s" NRM " is already calibrated. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
+		if(hvmask&(1<<c)) printf(Mag "\n%s-%s" NRM " is already calibrated. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
 		else printf("\nReady to calibrate" Mag " %s-%s " NRM "HV channel. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
 		printf("    1) Go on (HV will be applied, Keithley probe must be soldered before going on)!\n");
 		if(hvmask&(1<<c)) printf("    2) Calibrate ADC only (HV will be applied, but Keithley is not needed)\n");
@@ -891,11 +908,11 @@ int FzTest::HVcalib() {
 		if(ret==3) continue;
 		if(ret==0) break;
 		if(ret==2 && (hvmask&(1<<c))==0) {
-			printf(YEL "HVcalib " NRM "Unable to calibate ADC only (DAC must be calibrated first!)\n");
+			printf(YEL "HVCalib " NRM "Unable to calibate ADC only (DAC must be calibrated first!)\n");
 			ret=1;
 		}
 		if(ret==1 && ksock==nullptr) {
-			printf(RED "HVcalib " NRM " Keithley 2000 is not connected or configured\n");
+			printf(RED "HVCalib " NRM " Keithley 2000 is not connected or configured\n");
 			break;
 		}
 		if(ret==1) dac=true;
@@ -912,14 +929,37 @@ int FzTest::HVcalib() {
 		}
 		
 		//Calibrate!
-		if((ret=HVcalChan(c,max,dac))<0) return ret;
+		if((ret=HVCalChan(c,max,dac))<0) return ret;
 		fCalib=true;
 	}
 	max=0;
 	for(c=0;c<4;c++) {
 		if(tcal[c]>=0) max+=tcal[c];
 	}
-	printf(GRN "HVcalib " NRM " overall calibration terminated in %2dm%02ds. " BLD "Please restart the card before applying HV!\n" NRM,max/60,max%60);
+	printf(GRN "HVCalib " NRM " overall calibration terminated in %2dm%02ds. " BLD "Please restart the card before applying HV!\n" NRM,max/60,max%60);
+	return 0;
+}
+
+int FzTest::HVManual() {
+	int c;
+	char query[SLENG];
+	uint8_t reply[MLENG];
+	
+	printf("\nWhich channel do you want to test?\n");
+	printf("    0) Si1-A\n");
+	printf("    1) Si2-A\n");
+	printf("    2) Si1-B\n");
+	printf("    3) Si2-B\n");
+	printf("[default=quit]> ");
+	c=getchar();
+	if(c!='\n') {
+		for(;getchar()!='\n';);
+	}
+	if(c<0x30 || c>0x33) return 0;
+	c-=0x30;
+	
+	//DAC o V???
+	
 	return 0;
 }
 
@@ -950,6 +990,14 @@ void FzTest::UpdateDB() {
 		scanf("%d",&N); getchar();
 		if(N<=0 || N>=65535) return;
 		SetSN(N);
+	}
+	
+	sprintf(dirname,"testdb");
+	if(stat(dirname,&st)<0) {
+		if(mkdir(dirname,0755)<0) {
+			perror(RED "UpdateDB" NRM);
+			return;
+		}
 	}
 	
 	sprintf(dirname,"testdb/%05d",sn);

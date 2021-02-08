@@ -231,7 +231,7 @@ int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
 }
 
 //Fast LV and HV checks
-int FzTest::LVHVtest() {
+int FzTest::LVHVTest() {
 	int c,N,ret,itmp[8];
 	uint8_t reply[MLENG];
 	float ftmp[3];
@@ -284,7 +284,7 @@ int FzTest::LVHVtest() {
 
 //HV functions
 //Calibration of a specific HV channel
-int FzTest::HVcalChan(const int c,const int max,const bool dac) {
+int FzTest::HVCalChan(const int c,const int max,const bool dac) {
 	int N=0,i,ret,Vtarg,Vset,Vvar,maxvar,dau,oldau=-1,dacadr,isamadr;
 	double VKvar,lastV[2]={0,0},lastD[2]={0,0},bakV,bakD;
 	const int cdisc[4]={0,2,1,3};
@@ -314,11 +314,11 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 			if((ret=SetDAC(c,0))<0) return ret;
 			i=0;
 			if(bakV<2) {
-				printf(YEL "HVcalib " NRM " No voltage measured. Please check soldering...");
+				printf(YEL "HVCalib " NRM " No voltage measured. Please check soldering...");
 				i=1;
 			}
 			else if(N) {
-				printf(YEL "HVcalib " NRM " Inverted probe. Please swap the connectors on Keithley...");
+				printf(YEL "HVCalib " NRM " Inverted probe. Please swap the connectors on Keithley...");
 				i=1;
 			}
 			if(i) {
@@ -350,7 +350,7 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 		Vdac[c][0]=0;
 		if((ret=GetVoltage(Vkei[c],nullptr,true))<0) return ret;
 		if(Vkei[c][0]>=1) {
-			printf(YEL "HVcalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,Vkei[c][0],lChan[c%2],lFPGA[c/2]);
+			printf(YEL "HVCalib " NRM " measured voltage is not zero (%f). Skipping" Mag " %s-%s\n" NRM,Vkei[c][0],lChan[c%2],lFPGA[c/2]);
 			goto bad;
 		}
 	}
@@ -360,13 +360,13 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	maxvar=(int)(Vadc[c][0]/200); //0.5%
 	if(maxvar<50) maxvar=50;
 	if(Vvar>=maxvar) {
-		printf(YEL "HVcalib " NRM " unstable HV: Vtarg=0, ADC=%5.0f, DADC=%5d\n",Vadc[c][0],Vvar);
+		printf(YEL "HVCalib " NRM " unstable HV: Vtarg=0, ADC=%5.0f, DADC=%5d\n",Vadc[c][0],Vvar);
 		goto bad;
 	}
 	
 	//Calibration points every 10V
 	for(Vtarg=10,N=1;Vtarg<=max;Vtarg+=10,N++) {
-		printf("\n" CYA "HVcalib " BLD "***** NEW TARGET VOLTAGE => %3d V *****\n",Vtarg);
+		printf("\n" CYA "HVCalib " BLD "***** NEW TARGET VOLTAGE => %3d V *****\n",Vtarg);
 		if(dac) {
 			//DAC CALIBRATION!
 			bakV=lastV[1]; bakD=lastD[1];
@@ -377,26 +377,26 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 				//First point: guess
 				if(fabs(lastV[1]-lastV[0])<0.001) {
 					dau=V2D[c%2]*Vset;
-					if(i==0) printf(CYA "HVcalib " NRM " guessing first DAC value...\n");
+					if(i==0) printf(CYA "HVCalib " NRM " guessing first DAC value...\n");
 				}
 				//Then: linear extrapolation
 				else {
 					dau=(int)(0.5+lastD[0]+(((double)Vset)-lastV[0])*(lastD[1]-lastD[0])/(lastV[1]-lastV[0]));
-					if(i==0) printf(CYA "HVcalib " NRM " extrapolating from (%3.0f V: %5.0f), (%3.0f V: %5.0f)\n",lastV[0],lastD[0],lastV[1],lastD[1]);
+					if(i==0) printf(CYA "HVCalib " NRM " extrapolating from (%3.0f V: %5.0f), (%3.0f V: %5.0f)\n",lastV[0],lastD[0],lastV[1],lastD[1]);
 				}
 				
 				if((ret=SetDAC(c,dau,oldau))<0) goto err;
 				oldau=dau;
 				if((ret=GetVoltage(Vkei[c]+N,&VKvar,true))<0) goto err;
 				if(VKvar>=1) {
-					printf(YEL "HVcalib " NRM " unstable HV: Vset=%d, VKeith=%.3f, DVKeith=%.3f\n",Vset,Vkei[c][N],VKvar);
+					printf(YEL "HVCalib " NRM " unstable HV: Vset=%d, VKeith=%.3f, DVKeith=%.3f\n",Vset,Vkei[c][N],VKvar);
 					goto bad;
 				}
 				if(fabs(Vkei[c][N]-(double)Vset)>5) {
-					printf(YEL "HVcalib " NRM " unexpected HV meas.: Vset=%d, VKeith=%.3f, DVKeith=%.3f\n",Vset,Vkei[c][N],VKvar);
+					printf(YEL "HVCalib " NRM " unexpected HV meas.: Vset=%d, VKeith=%.3f, DVKeith=%.3f\n",Vset,Vkei[c][N],VKvar);
 					goto bad;
 				}
-				printf(CYA "HVcalib " Mag " %s-%s " NRM "       DAC set to %5d => VKeith = " BLD "%7.3f\n" NRM,lChan[c%2],lFPGA[c/2],dau,Vkei[c][N]);
+				printf(CYA "HVCalib " Mag " %s-%s " NRM "       DAC set to %5d => VKeith = " BLD "%7.3f\n" NRM,lChan[c%2],lFPGA[c/2],dau,Vkei[c][N]);
 				
 				lastV[0]=lastV[1];   lastD[0]=lastD[1];
 				lastV[1]=Vkei[c][N]; lastD[1]=(double)dau;
@@ -406,7 +406,7 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 // 				if(fabs(Vkei[c][N]-lastV[0])<0.05) break; //pleonastic!
 			}
 			if(i>=20 || fabs(Vkei[c][N]-(double)Vtarg)>=0.1) {
-				printf(YEL "HVcalib " NRM " unable to reach target voltage!\n");
+				printf(YEL "HVCalib " NRM " unable to reach target voltage!\n");
 				goto bad;
 			}
 			lastV[0]=bakV; lastD[0]=bakD;
@@ -422,7 +422,7 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 		maxvar=(int)(Vadc[c][N]/200); //0.5%
 		if(maxvar<50) maxvar=50;
 		if(Vvar>=maxvar) {
-			printf(YEL "HVcalib " NRM " unstable HV: Vtarg=%d, ADC=%5.0f, DADC=%5d\n",Vtarg,Vadc[c][N],Vvar);
+			printf(YEL "HVCalib " NRM " unstable HV: Vtarg=%d, ADC=%5.0f, DADC=%5d\n",Vtarg,Vadc[c][N],Vvar);
 			goto bad;
 		}
 		if(v4) {
@@ -451,7 +451,7 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 		cBV = labs((long int)(p0*1.e7));
 		sgV = (p0>=0) ? 1 : 0;
 		if(cBV>=(1<<24)) {
-			printf(YEL "HVcalib " NRM " V coeff B is outside boundaries\n");
+			printf(YEL "HVCalib " NRM " V coeff B is outside boundaries\n");
 			return 0;
 		}
 	}
@@ -466,12 +466,12 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 		}
 		sgV=1;
 		if((cBV>=(1L<<31))||(cBV<-(1L<<31))) {
-			printf(YEL "HVcalib " NRM " V coeff B is outside boundaries\n");
+			printf(YEL "HVCalib " NRM " V coeff B is outside boundaries\n");
 			return 0;
 		}
 	}
 	if((cAV>=(1L<<15))||(cAV<-(1L<<15))) {
-		printf(YEL "HVcalib " NRM " V coeff A is outside boundaries\n");
+		printf(YEL "HVCalib " NRM " V coeff A is outside boundaries\n");
 		return 0;
 	}
 	Vp0[c]=-p0/p1; Vp1[c]=1./(10.*p1);
@@ -481,16 +481,16 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	cBI = labs((long int)p0);
 	sgI = (p0>=0) ? 1 : 0;
 	if(cAI>=(1L<<32)) {
-		printf(YEL "HVcalib " NRM " I coeff A is outside boundaries\n");
+		printf(YEL "HVCalib " NRM " I coeff A is outside boundaries\n");
 		return 0;
 	}
 	if(cBI>=(1L<<32)) {
-		printf(YEL "HVcalib " NRM " I coeff B is outside boundaries\n");
+		printf(YEL "HVCalib " NRM " I coeff B is outside boundaries\n");
 		return 0;
 	}
 	Ip0[c]=p0; Ip1[c]=p1/10.;
-	printf(GRN "HVcalib " NRM " ADC-V = % 8.3f * V %c %6.3f\n",Vp1[c],(Vp0[c]<0)?'-':'+',fabs(Vp0[c]));
-	printf(GRN "HVcalib " NRM " ADC-I = % 8.3f * V %c %6.3f\n",Ip1[c],(Ip0[c]<0)?'-':'+',fabs(Ip0[c]));
+	printf(GRN "HVCalib " NRM " ADC-V = % 8.3f * V %c %6.3f\n",Vp1[c],(Vp0[c]<0)?'-':'+',fabs(Vp0[c]));
+	printf(GRN "HVCalib " NRM " ADC-I = % 8.3f * V %c %6.3f\n",Ip1[c],(Ip0[c]<0)?'-':'+',fabs(Ip0[c]));
 	
 	for(i=0;i<2;i++) if((ret=WriteCell(54+c*6+i,SELBYTE(cAV,i)))<0) return ret;
 	for(i=0;i<4;i++) {
@@ -513,7 +513,7 @@ int FzTest::HVcalChan(const int c,const int max,const bool dac) {
 	timersub(&tf,&ti,&dt);
 	bakD=(double)(dt.tv_sec)+((double)(dt.tv_usec))*1.e-6;
 	tcal[c]=(int)(bakD+0.5);
-	printf(GRN "HVcalib " Mag " %s-%s " NRM "  calibration terminated in %2dm%02ds\n",lChan[c%2],lFPGA[c/2],tcal[c]/60,tcal[c]%60);
+	printf(GRN "HVCalib " Mag " %s-%s " NRM "  calibration terminated in %2dm%02ds\n",lChan[c%2],lFPGA[c/2],tcal[c]/60,tcal[c]%60);
 	return 0;
 	
 	err: //ERROR: exit from everything
@@ -946,7 +946,7 @@ int FzTest::FullRead(const char *filename) {
 	}
 	
 	if(!fTested) printf(YEL "FullRead" NRM " fast test was not performed. Performing version check only...\n");
-	if((ret=LVHVtest())<0) goto err;
+	if((ret=LVHVTest())<0) goto err;
 	lastr=v4?655:303;
 	
 	if(!fVerb) printf("\n");
@@ -974,7 +974,7 @@ int FzTest::FullWrite(const char *filename) {
 	}
 	
 	if(!fTested) printf(YEL "FullWrit" NRM " fast test was not performed. Performing version check only...\n");
-	if((ret=LVHVtest())<0) goto err;
+	if((ret=LVHVTest())<0) goto err;
 	lastr=v4?655:303;
 	
 	for(N=0;fgets(row,SLENG,f);N++);

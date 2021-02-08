@@ -34,10 +34,10 @@ static const char lvlabel[19][50]={Mag "      VP5REFA - M121" NRM,Mag "      VP5
 static const float vref[19]={5000,5000,2500,2000,2000,2000,2000,3700,3000,3000,3000,3000,3300,3300,2500,1000,1800,1800,1800};
 static const char lvnotes[19][15]={"From VP12_0","From VP12_0","From VP5_5_IN","From VM27","From VM27","From VM27","From VM27","From VP5_5_IN","From VP37","From VP37","From VP37","From VP37","From VP37","From VP37","From VP5_5_IN","From VP25","From VP25","From VP25","From VP25"};
 //Offset constants
-static const float blref3[6]={-7400,-5650,-4500,-7400,-5650,-7400};
-static const float blref5[6]={-7400,-5100,-5700,-7400,-4250,-7400};
-static const float bltoll[6]={ 0.02,  0.1,  0.1, 0.02,  0.1, 0.02};
-static const float blvtol[6]={   20,  200,  200,   20,  200,   20};
+static const float blref3[6]={-7406,-5650,-4500,-7406,-5650,-7406};
+static const float blref5[6]={-7406,-5150,-5800,-7406,-4290,-7406};
+static const float bltoll[6]={   50,  250, 1000,   50,  250,   50};
+static const float blvtol[6]={   15,   80,   80,   15,   80,   15};
 //HV constants:                Si1     Si2
 static const int maxhv3[2]={    200,    350};
 static const int maxhv4[2]={    300,    400};
@@ -81,8 +81,8 @@ private:
 	int SetSN(const int sn);
 	int OffCheck(const int ch);
 	int BLmeas(const int ch,const int tries,int *Bl,int *Blvar);
-	int LVHVtest();
-	int HVcalChan(const int c,const int max,const bool dac);
+	int LVHVTest();
+	int HVCalChan(const int c,const int max,const bool dac);
 	int ApplyHV(const int c,const int V);
 	int ApplyManyHV(const int testmask,const int *V);
 	int IVmeas(const int c,int *V,int *Vvar,int *I,bool wait=true);
@@ -97,8 +97,9 @@ private:
 	int OffCal();
 	int OffCurve();
 	int OffManual();
-	int HVtest();
-	int HVcalib();
+	int HVTest();
+	int HVCalib();
+	int HVManual();
 	
 	//common variables
 	bool fTested,fCalib,fVerb;

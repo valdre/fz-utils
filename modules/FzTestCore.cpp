@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/12/2020                          *
+*                         Simone Valdre' - 08/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -803,17 +803,22 @@ int FzTest::ManyIVmeas(const int testmask,int *V,int *Vvar,int *I,bool wait) {
 }
 
 //Measure raw I and V (not calibrated!)
-int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
+int FzTest::IVADC(const int c,double *V,int *Vvar,double *I,bool wait /*=true*/) {
 	int ret,Nch=0,Nstab=0,tmp,Vmax,Vmin,old=-1,dir=0,oldir=0;
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	double av;
 	
-	if(!fVerb) printf(BLD "IVADC   " Mag " %s-%s" NRM " waiting for current stabilization\n",lChan[c%2],lFPGA[c/2]);
-	sleep(2);
+	if(I==nullptr) wait=false;
+	if(wait) {
+		if(!fVerb) printf(BLD "IVADC   " Mag " %s-%s" NRM " waiting for current stabilization\n",lChan[c%2],lFPGA[c/2]);
+		sleep(2);
+	}
+	else printf("\n");
+	
 	//30s timeout for current stabilization
 	sprintf(query,"%d",c);
-	for(int i=0;i<60;i++) {
+	for(int i=0;wait && i<60;i++) {
 		usleep(500000);
 		if((ret=sock->Send(blk,fee,0x8F,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&tmp);
@@ -834,7 +839,6 @@ int FzTest::IVADC(const int c,double *V,int *Vvar,double *I) {
 	//Current measurement: 10 samples (ADC isn't already averaged onboard, differently from calibrated I measurement!)
 	if(!fVerb) printf(UP BLD "IVADC   " Mag " %s-%s" NRM " current stabilized. Measuring current...      \n",lChan[c%2],lFPGA[c/2]);
 	av=0;
-	sprintf(query,"%d",c);
 	for(int i=0;i<10;i++) {
 		usleep(50000);
 		if((ret=sock->Send(blk,fee,0x8F,query,reply,fVerb))) return ret;

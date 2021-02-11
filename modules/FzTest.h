@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/12/2020                          *
+*                         Simone Valdre' - 08/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -87,7 +87,7 @@ private:
 	int ApplyManyHV(const int testmask,const int *V);
 	int IVmeas(const int c,int *V,int *Vvar,int *I,bool wait=true);
 	int ManyIVmeas(const int testmask,int *V,int *Vvar,int *I,bool wait=true);
-	int IVADC(const int c,double *V,int *Vvar,double *I);
+	int IVADC(const int c,double *V,int *Vvar,double *I, bool wait=true);
 	int LinReg(const int n,const double *x,const double *y,double *p1,double *p0);
 	int SetDAC(const int c, const int vset, int vprev=-1);
 	int ReadCell(const int add);

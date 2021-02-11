@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/12/2020                          *
+*                         Simone Valdre' - 08/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -523,7 +523,7 @@ int FzTest::Manual() {
 		printf("    3) Plot offset calibration curve\n");
 		printf("    4) Offset manual test\n");
 		printf("    5) HV calibration\n");
-		printf("    6) HV manual test (not implemented)\n");
+		printf("    6) HV manual test\n");
 		printf("    7) Send manual SC command (not implemented)\n");
 		if(fTested) printf("    8) Repeat the fast test\n");
 		else printf("    8) Perform the fast test\n");
@@ -550,10 +550,9 @@ int FzTest::Manual() {
 				if((ret=HVCalib())<0) return ret;
 				tmp=0;
 				break;
-// 			case 6:
-// 				if((ret=HVManual())<0) return ret;
-// 				tmp=0;
-// 				break;
+			case 6:
+				if((ret=HVManual())<0) return ret;
+				break;
 			case 8: case 9:
 				if((ret=FastTest((tmp==8)?false:true))<0) return ret;
 				Report();
@@ -571,7 +570,7 @@ int FzTest::OffCal() {
 	uint8_t reply[MLENG];
 	int finaldac[6];
 	
-	printf("\nTarget baseline [-7400]>");
+	printf("\nTarget baseline [-7400]> ");
 	for(c=0;c<SLENG-1;c++) {
 		ctmp=getchar();
 		if(ctmp=='\n') break;
@@ -941,9 +940,13 @@ int FzTest::HVCalib() {
 }
 
 int FzTest::HVManual() {
-	int c;
+	int ret,chr,c,cal,max,dac,V,I;
+	double Vd,Id;
 	char query[SLENG];
 	uint8_t reply[MLENG];
+	
+	if(!fTested) printf(YEL "HVManual" NRM " fast test was not performed. Performing HV check only...\n");
+	if((ret=LVHVTest())<0) return ret;
 	
 	printf("\nWhich channel do you want to test?\n");
 	printf("    0) Si1-A\n");
@@ -958,9 +961,81 @@ int FzTest::HVManual() {
 	if(c<0x30 || c>0x33) return 0;
 	c-=0x30;
 	
-	//DAC o V???
+	//Set max voltage
+	max=v4?maxhv4[c%2]:maxhv3[c%2];
+	sprintf(query,"%s,%d,%d",lFPGA[c/2],c%2+1,max);
+	if((ret=sock->Send(blk,fee,0x92,query,reply,fVerb))) return ret;
 	
+	//Enable HV (v4/5 only)
+	if(v4) {
+		sprintf(query,"%s,1",lFPGA[c/2]);
+		if((ret=sock->Send(blk,fee,0xA6,query,reply,fVerb))) return ret;
+	}
+	
+	if(hvmask&(1<<c)) {
+		printf("\nDo you want to set DAC output or calibrated voltage?\n");
+		printf("    0) DAC\n");
+		printf("    1) V\n");
+		printf("[default=1]> ");
+		cal=getchar();
+		if(cal!='\n') {
+			for(;getchar()!='\n';);
+		}
+		if(cal<0x30 || cal>0x31) cal=1;
+		else cal-=0x30;
+	}
+	else {
+		printf(YEL "HVManual" NRM " HV is not calibrated, setting DAC values only\n");
+		cal=0;
+	}
+	
+	for(;;) {
+		if(cal) {
+			printf("V [<0 to stop]> "); scanf("%d",&dac); getchar();
+			if(dac<0) break;
+			if(dac>max) {
+				printf(UP RED "Bad value!" NRM "Maximum allowed: %d V\n",max);
+				continue;
+			}
+			if((ret=ApplyHV(c,dac))<0) goto err;
+			//measuring calibrated and uncalibrated readings
+			if((ret=IVmeas(c,&V,nullptr,&I,true))<0) goto err;
+			if((ret=IVADC(c,&Vd,nullptr,&Id,false))<0) goto err;
+		}
+		else {
+			printf("DAC value [<0 to stop]> "); scanf("%d",&dac); getchar();
+			if(dac<0) break;
+			if(dac>65535) {
+				printf(UP RED "Bad value!" NRM "Maximum allowed: 65535\n");
+				continue;
+			}
+			if(dac>30000) {
+				printf(UP YEL "Very high DAC value!!! Are you sure? " NRM "[y/N]> ");
+				chr=getchar();
+				if(chr!='\n') {
+					for(;getchar()!='\n';);
+				}
+				if(chr=='\n' || chr=='n' || chr=='N') continue;
+			}
+			
+			if((ret=SetDAC(c,dac))<0) goto err;
+			//measuring (calibrated and) uncalibrated readings
+			if(hvmask&(1<<c)) {
+				if((ret=IVmeas(c,&V,nullptr,&I,true))<0) goto err;
+				if((ret=IVADC(c,&Vd,nullptr,&Id,false))<0) goto err;
+			}
+			else {
+				if((ret=IVADC(c,&Vd,nullptr,&Id,true))<0) goto err;
+			}
+		}
+	}
+	SetDAC(c,0);
 	return 0;
+	
+	err:
+	//forcing return to 0V to all channels
+	for(c=0;c<4;c++) SetDAC(c,0);
+	return ret;
 }
 
 //Update the card DB on disk
@@ -986,7 +1061,7 @@ void FzTest::UpdateDB() {
 		if(N>0) sn=N;
 	}
 	if(sn<=0 || sn>=65535) {
-		printf("\nSN is not defined! Type a valid SN (1-65534)>");
+		printf("\nSN is not defined! Type a valid SN (1-65534)> ");
 		scanf("%d",&N); getchar();
 		if(N<=0 || N>=65535) return;
 		SetSN(N);

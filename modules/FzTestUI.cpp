@@ -1,97 +1,18 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 08/02/2021                          *
+*                         Simone Valdre' - 11/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
 
 #include "FzTest.h"
 
-//Public: fast test routine
-int FzTest::FastTest(bool hv) {
+//Fast test routine
+int FzTest::FastTest(bool man) {
 	int c,N,ret;
-	char query[SLENG];
-	uint8_t reply[MLENG];
-	int itmp[3];
-	
-	if(!fVerb) printf(BLD "FastTest" NRM " initializing parameters\n");
-	Init();
-	if(!fVerb) printf(UP GRN "FastTest" NRM " initializing parameters\n");
-	
-	//Get serial number
-	if(!fVerb) printf(BLD "FastTest" NRM " getting serial number\n");
-	if((ret=sock->Send(blk,fee,0xA5,"Q",reply,fVerb))) return ret;
-	N=sscanf((char *)reply,"0|%d",&sn);
-	if(N!=1) return -20;
-	if(!fVerb) printf(UP GRN "FastTest" NRM " getting serial number\n");
-	
-	//Get PIC firmware version
-	if(!fVerb) printf(BLD "FastTest" NRM " getting firmware versions\n");
-	if((ret=sock->Send(blk,fee,0x8B,"",reply,fVerb))) return ret;
-	N=sscanf((char *)reply,"0|%d,%d,%d,V%*d",itmp,itmp+1,itmp+2);
-	if(N!=3) return -20;
-	sprintf(vPIC,"%02d/%02d/%04d",itmp[0],itmp[1],itmp[2]);
-	//Get FPGA firmware version
-	for(c=0;c<2;c++) {
-		if((ret=sock->Send(blk,fee,0x8C,lFPGA[c],reply,fVerb))) return ret;
-		N=sscanf((char *)reply,"0|tel=%*c,day=%d,month=%d,year=%d,variant=%*d",itmp,itmp+1,itmp+2);
-		if(N!=3) return -20;
-		else sprintf(vFPGA[c],"%02d/%02d/%04d",itmp[0],itmp[1],itmp[2]);
-	}
-	if(!fVerb) printf(UP GRN "FastTest" NRM " getting firmware versions\n");
-	
-	//Get temperatures
-	if(!fVerb) printf(BLD "FastTest" NRM " getting temperatures\n");
-	if((ret=sock->Send(blk,fee,0x83,"",reply,fVerb))) return ret;
-	N=sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d",temp,temp+1,temp+2,temp+3,temp+4,temp+5);
-	if(N<6) return -20;
-	if(!fVerb) printf(UP GRN "FastTest" NRM " getting temperatures\n");
-	
-	//Get LV values and HV calibration status
-	if(!fVerb) printf(BLD "FastTest" NRM " getting low voltages, card version and HV calibration status\n");
-	if((ret=LVHVTest())<0) return ret;
-	if(!fVerb) printf(UP GRN "FastTest" NRM " getting low voltages, card version and HV calibration status\n");
-	
-	//Test pre-amp
-	if(!fVerb) printf(BLD "FastTest" NRM " testing pre-amplifiers (Go/NOGo)\n");
-	for(c=0;c<6;c++) {
-		sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+1);
-		if((ret=sock->Send(blk,fee,0x98,query,reply,fVerb))) return ret;
-		ret=sscanf((char *)reply,"0|%d",&N);
-		if(ret!=1) return -20;
-		if(N) gomask|=(1<<c);
-	}
-	if(!fVerb) printf(UP GRN "FastTest" NRM " testing pre-amplifiers (Go/NOGo)\n");
-	
-	//Test baseline offset
-	if(!fVerb) printf(BLD "FastTest" NRM " testing baseline offsets\n");
-	for(c=0;c<12;c++) {
-		if((ret=OffCheck(c))<0) return ret;
-	}
-	if(!fVerb) printf(UP GRN "FastTest" NRM " testing baseline offsets\n");
-	
-	fTested=true;
-	
-	//HV test (no calibration)
-	if(hv) {
-		if(!fVerb) printf(BLD "FastTest" NRM " testing HV quality\n");
-		if((ret=HVTest())<0) return ret;
-	}
-	return 0;
-}
-
-//Public: result report
-void FzTest::Report() {
-	int c,status,cnt;
 	float ref;
-	bool hvt=true;
 	
-	if(!fTested) {
-		printf(YEL "Report  " NRM "fast test was not performed\n");
-		return;
-	}
-	failmask=0;
-	
+	Init();
 	printf("\n\n");
 	printf(BLD "                         **************************************************\n");
 	printf("                         *                  TEST  REPORT                  *\n");
@@ -99,331 +20,279 @@ void FzTest::Report() {
 	printf(BLD "      Parameter      Res.         Value         Reference  Note\n" NRM);
 	printf("----------------------------------------------------------------------------------------------------\n");
 	
+	//General test (SN, FW, temperatures, LV, card version, HV cal. status)
+	if((ret=TestGeneral())<0) return ret;
+	
 	//Card type and serial number
 	printf(BLD "Card Type and SN     " NRM);
-	if((v4<0)||(sn<0)) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-	else {
-		if(sn==65535) {
-			failmask|=2;
-			printf(RED "Fail" NRM "                 %4s            No SN data\n",v4?"v4/5":"  v3");
-		}
-		else printf(GRN "Pass" NRM "             %4s-%03d\n",v4?"v4/5":"  v3",sn);
+	if(sn==65535) {
+		failmask|=FAIL_SN;
+		printf(YEL "Warn" NRM "                 %4s            No SN data\n",v4?"v4/5":"  v3");
 	}
+	else printf(GRN "Pass" NRM "             %4s-%03d\n",v4?"v4/5":"  v3",sn);
 	
 	//PIC and FPGA version
 	printf(BLD "\nFirmware:\n" NRM);
 	printf("         PIC Version ");
-	if(vPIC[0]=='\0') printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-	else {
-		if(strcmp(vPIC,v4?LASTVPICV4:LASTVPICV3)) {
-			failmask|=4;
-			printf(YEL"Warn" NRM " %20s %10s Obsolete firmware\n",vPIC,v4?LASTVPICV4:LASTVPICV3);
-		}
-		printf(GRN "Pass" NRM " %20s %10s\n",vPIC,v4?LASTVPICV4:LASTVPICV3);
+	if(strcmp(vPIC,v4?LASTVPICV4:LASTVPICV3)) {
+		failmask|=FAIL_FW;
+		printf(YEL"Warn" NRM " %20s %10s Obsolete firmware\n",vPIC,v4?LASTVPICV4:LASTVPICV3);
 	}
+	printf(GRN "Pass" NRM " %20s %10s\n",vPIC,v4?LASTVPICV4:LASTVPICV3);
 	for(c=0;c<2;c++) {
 		printf("      FPGA %s Version ",lFPGA[c]);
-		if(vFPGA[c][0]=='\0') printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-		else {
-			if(strcmp(vFPGA[c],LASTVFPGA)) {
-				failmask|=4;
-				printf(YEL"Warn" NRM " %20s %10s Obsolete firmware\n",vFPGA[c],LASTVFPGA);
-			}
-			else printf(GRN "Pass" NRM " %20s %10s\n",vFPGA[c],LASTVFPGA);
+		if(strcmp(vFPGA[c],LASTVFPGA)) {
+			failmask|=FAIL_FW;
+			printf(YEL"Warn" NRM " %20s %10s Obsolete firmware\n",vFPGA[c],LASTVFPGA);
 		}
+		else printf(GRN "Pass" NRM " %20s %10s\n",vFPGA[c],LASTVFPGA);
 	}
 	
 	//Temperatures
-	status=0;
+	ret=0;
 	for(c=0;c<6;c++) {
-		if(temp[c]<0) {status=-1; break;}
-		if(temp[c]>=70) status|=2;
-		else if(temp[c]>=50) status|=1;
+		if(temp[c]>=70) ret|=2;
+		else if(temp[c]>=50) ret|=1;
 	}
 	printf(BLD "\nTemperatures (in °C) " NRM);
-	if(status<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-	else {
-		if(status>=1) printf(YEL "Warn" NRM "    ");
-		else printf(GRN "Pass" NRM "    ");
-		for(c=0;c<6;c++) {
-			if(c>0) printf(",");
-			printf("%2d",temp[c]);
-		}
-		if(status>1) {
-			failmask|=1;
-			printf("     <50-70 Overheat\n");
-		}
-		else if(status==1) printf("     <50-70 Warm\n");
-		else printf("     <50-70\n");
+	if(ret>=1) printf(YEL "Warn" NRM "    ");
+	else printf(GRN "Pass" NRM "    ");
+	for(c=0;c<6;c++) {
+		if(c>0) printf(",");
+		printf("%2d",temp[c]);
 	}
+	if(ret>1) {
+		failmask|=FAIL_TEMP;
+		printf("     <50-70 Overheat\n");
+	}
+	else if(ret==1) printf("     <50-70 Warm\n");
+	else printf("     <50-70\n");
 	
 	//Low voltages
 	printf(BLD "\nLow voltages (in mV, measured by " Mag "M46" BLD ", " Cya "M1" BLD " and " Blu "M2" BLD "):\n" NRM);
 	for(c=0;c<19;c++) {
 		if(lv[c]==-2) continue;
 		printf("%s ",lvlabel[c]);
-		if(lv[c]<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-		else {
-			if(fabs(vref[c]-(double)(lv[c]))/vref[c]>=0.05) {
-				failmask|=8;
-				printf(RED "Fail" NRM);
-			}
-			else printf(GRN "Pass" NRM);
-			printf(" %20d %10.0f %s\n",lv[c],vref[c],lvnotes[c]);
+		if(fabs(vref[c]-(double)(lv[c]))/vref[c]>=0.05) {
+			failmask|=FAIL_LV;
+			printf(RED "Fail" NRM);
 		}
+		else printf(GRN "Pass" NRM);
+		printf(" %20d %10.0f %s\n",lv[c],vref[c],lvnotes[c]);
 	}
 	
-	// ADC status
+	//Analog chain test (Pre-Amp, DC offsets and ADCs)
+	if((ret=TestAnalog())<0) return ret;
+	
+	// Pre-amp Go/NoGo test
+	printf(BLD "\nPre-amplifiers Go / NOGo test:\n" NRM);
 	for(c=0;c<6;c++) {
-		if((((gomask)&(1<<c))>>c)==0 && blvar[c2ch[c]]==0 && dcreact[c]==0) {
-			adcmask|=(1<<c);
-			failmask|=4096;
+		if(adcmask&(1<<c)) continue; //Skip line if ADC is broken
+		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
+		if((gomask&(1<<c))==0) {
+			failmask|=FAIL_PREAMP;
+			printf(RED "Fail" NRM);
 		}
+		else printf(GRN "Pass" NRM);
+		printf("\n");
 	}
 	
-	// Go/NoGo
-	printf(BLD "\nPre-amplifiers       " NRM);
-	if(gomask<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-	else {
-		if(gomask==63) printf(GRN "Pass" NRM "         ");
-		else {
-			if((gomask|adcmask)==63) printf(YEL "Warn" NRM "         ");
+	//Baseline DC level
+	printf(BLD "\nBaseline DC level (in DAC units):\n" NRM);
+	for(c=0;c<6;c++) {
+		if(adcmask&(1<<c)) continue; //Skip line if ADC is broken
+		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
+		if((dacoff[c]<600) || (dacoff[c]>800) || (dcreact[c]<1000)) {
+			if(dcreact[c]<1000) {
+				printf(RED "Fail" NRM);
+				failmask|=FAIL_OFFSET;
+			}
 			else {
-				failmask|=16;
-				printf(RED "Fail" NRM "         ");
+				printf(YEL "Warn" NRM);
+				failmask|=FAIL_DC;
 			}
 		}
-		cnt=0;
-		for(c=0;c<6;c++) {
-			if(adcmask&(1<<c)) printf(" ?");
-			else {
-				printf(" %1d",((gomask)&(1<<c))>>c);
-				if((gomask&(1<<c))==0) cnt++;
-			}
+		else printf(GRN "Pass" NRM);
+		printf(" % 20d % 10d",dacoff[c],680);
+		if(dcreact[c]<1000) {
+			printf(" Non responsive");
+			if((dacoff[c]<600) || (dacoff[c]>800)) printf(" -");
 		}
-		printf("       1=OK ");
-		if(cnt) {
-			printf("Broken:");
-			for(c=0;c<6;c++) {
-				if(((gomask|adcmask)&(1<<c))==0) printf(" %s-%s",lChan[c%3],lFPGA[c/3]);
-			}
-		}
-		else if(adcmask) printf("Status unknown");
+		if((dacoff[c]<600) || (dacoff[c]>800)) printf(" Bad level");
 		printf("\n");
 	}
 	
 	//Baseline offsets
 	printf(BLD "\nBaseline offsets (in ADC units):\n" NRM);
 	for(c=0;c<12;c++) {
-		printf("               %s-%s ",lADC[c%6],lFPGA[c/6]);
-		if(bl[c]<-8500) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-		else {
-			ref=(v4)?blref5[c%6]:blref3[c%6];
-			if((fabs(ref-(double)(bl[c]))>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])) {
-				if((adcmask&(1<<(ch2c[c])))==0 || c==1 || c==2 || c==4 || c==7 || c==8 || c==10) failmask|=32;
-				printf(RED "Fail" NRM);
-			}
-			else printf(GRN "Pass" NRM);
-			printf(" % 20d % 10.0f",bl[c],ref);
-			if((adcmask&(1<<(ch2c[c]))) && (c==0 || c==3 || c==5 || c==6 || c==9 || c==11)) printf(" Broken ADC");
-			else {
-				if(blvar[c]>=blvtol[c%6]) {
-					printf(" Unstable");
-					if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) printf(" -");
-				}
-				if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) printf(" Bad level");
-			}
-			printf("\n");
+		if(adcmask&(1<<ch2c[c]) && is_charge[c%6]) continue; //Skip line if ADC is broken
+		if(((dacoff[ch2c[c]]<600) || (dacoff[ch2c[c]]>800) || (dcreact[ch2c[c]]<1000)) && is_charge[c%6]) continue; //Skip line if a failure on DC level was already shown
+		
+		printf("               %s-%s ",lADC[c%6],lFPGA[c/6]);ref=(v4)?blref5[c%6]:blref3[c%6];
+		if((fabs(ref-(double)(bl[c]))>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])) {
+			failmask|=FAIL_OFFSET;
+			printf(RED "Fail" NRM);
 		}
+		else printf(GRN "Pass" NRM);
+		printf(" % 20d % 10.0f",bl[c],ref);
+		if(blvar[c]>=blvtol[c%6]) {
+			printf(" Unstable");
+			if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) printf(" -");
+		}
+		if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) printf(" Bad level");
+		printf("\n");
 	}
 	
-	//Baseline DC level
-	printf(BLD "\nBaseline DC level (in DAC units):\n" NRM);
+	//ADC
+	printf(BLD "\n100MHz ADCs status:\n" NRM);
 	for(c=0;c<6;c++) {
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
-		if(dacoff[c]<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-		else {
-			if((dacoff[c]<600) || (dacoff[c]>800) || (dcreact[c]<1000)) {
-				if((adcmask&(1<<c))==0) failmask|=32;
-				printf(RED "Fail" NRM);
-			}
-			else printf(GRN "Pass" NRM);
-			printf(" % 20d % 10d",dacoff[c],680);
-			if(adcmask&(1<<c)) printf(" Broken ADC");
-			else {
-				if(dcreact[c]<1000) {
-					printf(" Non responsive");
-					if((dacoff[c]<600) || (dacoff[c]>800)) printf(" -");
-				}
-				if((dacoff[c]<600) || (dacoff[c]>800)) printf(" Bad level");
-			}
-			printf("\n");
+		if(adcmask&(1<<c)) {
+			failmask|=FAIL_ADC;
+			printf(RED "Fail" NRM);
 		}
-	}
-	
-	//HV calibration status
-	printf(BLD "\nHigh Voltage:\n" NRM);
-	printf("  Calibration status ");
-	if(hvmask<0) printf(BLU " ?? " NRM "                                 Invalid reply from PIC\n");
-	else {
-		if(hvmask==15) printf(GRN "Pass" NRM "             ");
-		else {
-			failmask|=64;
-			printf(RED "Fail" NRM "             ");
-		}
-		for(c=0;c<4;c++) printf(" %1d",((hvmask)&(1<<c))>>c);
-		printf("    1=Calib ");
-		if(hvmask<15) {
-			printf("Uncalibrated:");
-			for(c=0;c<4;c++) {
-				if(((hvmask)&(1<<c))==0) printf(" %s-%s",lChan[c%2],lFPGA[c/2]);
-			}
-		}
+		else printf(GRN "Pass" NRM);
 		printf("\n");
 	}
+	
+	//HV calibration
+	printf(BLD "\nHV calibration status:\n" NRM);
 	for(c=0;c<4;c++) {
-		if(V20[c]<0 || V20var[c]<0) {hvt=false; continue;}
-		
-		printf(" %3s-%1s        (20 V) ",lChan[c%2],lFPGA[c/2]);
-		if(abs(V20[c]-20)>1 || V20var[c]>5) printf(RED "Fail" NRM);
+		printf("               %s-%s ",lChan[c%2],lFPGA[c/2]);
+		if((hvmask&(1<<c))==0) {
+			failmask|=FAIL_HVCALIB;
+			printf(YEL "Uncal." NRM);
+		}
 		else printf(GRN "Pass" NRM);
-		printf(" % 20d         20",V20[c]);
-		if(abs(V20[c]-20)>1) {
-			printf(" V mismatch");
-			failmask|=256;
-			if(V20var[c]>5) printf(" -");
-		}
-		if(V20var[c]>5) {
-			printf(" Unstable HV");
-			failmask|=2048;
-		}
 		printf("\n");
-		
-		int max=v4?maxhv4[c%2]:maxhv3[c%2];
-		if(Vfull[c]<0 || Vfullvar[c]<0) continue;
-		printf(" %3s-%1s        (Vmax) ",lChan[c%2],lFPGA[c/2]);
-		if(abs(Vfull[c]-max)>5 || Vfullvar[c]>5) printf(RED "Fail" NRM);
-		else printf(GRN "Pass" NRM);
-		printf(" % 20d        %3d",Vfull[c],max);
-		if(abs(Vfull[c]-max)>5) {
-			printf(" V mismatch");
-			failmask|=256;
-			if(Vfullvar[c]>5) printf(" -");
-		}
-		if(Vfullvar[c]>5) {
-			printf(" Unstable HV");
-			failmask|=2048;
-		}
-		printf("\n");
-		
-		if(Ifull[c]<0) continue;
-		printf(" %3s-%1s (Ioff @ Vmax) ",lChan[c%2],lFPGA[c/2]);
-		if(Ifull[c]>100) printf(RED "Fail" NRM);
-		else printf(GRN "Pass" NRM);
-		printf(" % 20d       <100",Ifull[c]);
-		if(Ifull[c]>100) {
-			printf(" Bad I offset");
-			failmask|=512;
-		}
-		printf("\n");
-		
-		if(I1000[c]<0) continue;
-		printf(" %3s-%1s (Iref=1000nA) ",lChan[c%2],lFPGA[c/2]);
-		if(abs(I1000[c]-1000)>100) printf(RED "Fail" NRM);
-		else printf(GRN "Pass" NRM);
-		printf(" % 20d       1000",I1000[c]);
-		if(abs(I1000[c]-1000)>100) {
-			printf(" Bad I reading");
-			failmask|=1024;
-		}
-		printf("\n");
-		
-	}
-	if(!hvt) failmask|=128;
-	printf("----------------------------------------------------------------------------------------------------\n\n");
-	return;
-}
-
-//Public: guided resolution
-int FzTest::Guided() {
-	int ret,N;
-	
-	if(!fTested) {
-		printf(YEL "Guided  " NRM "fast test was not performed\n");
-		return 0;
 	}
 	
-	if(failmask&1) {
+	//If FastTest was launched in manual mode exit now.
+	if(man) return 0;
+	
+	//Else propose solutions:
+	if(failmask&FAIL_TEMP) {
 		printf("\nCard temperature is high. Please check cooling and restart the test...\n\n");
 		return 0;
 	}
 	if(failmask) {
-		printf("\nSome issues have been detected. What do you want to do?\n");
+		printf("\nSome issues have been detected. In this case other test results may be hidden\nbecause they are unreliable until the issues were solved.\nRemember to launch again the test after solving all the issues.\nWhat do you want to do?\n");
 		printf("    1) Guided resolution\n");
 		printf("    2) Manual resolution (operation menu)\n");
 		printf("    0) Quit\n");
-		printf("> "); scanf("%d",&ret); getchar();
+		printf("[default=1]> ");
+		ret=getchar();
+		if(ret=='\n') ret=0x31;
+		else {
+			for(;getchar()!='\n';);
+		}
+		ret-=0x30;
 		if((ret<0)||(ret>2)) ret=0;
 	}
 	else {
-		printf("\nThe FEE is fully functional! What do you want to do?\n");
-		printf("    1) Operation menu\n");
+		printf("\nThe FEE seems fully functional (but HV was not tested)! What do you want to do?\n");
+		printf("    1) Test HV\n");
+		printf("    2) Operation menu\n");
 		printf("    0) Quit\n");
-		printf("> "); scanf("%d",&ret); getchar();
-		if(ret==1) ret=2;
-		else ret=0;
+		printf("[default=1]> ");
+		ret=getchar();
+		if(ret=='\n') ret=0x31;
+		else {
+			for(;getchar()!='\n';);
+		}
+		ret-=0x30;
+		if((ret<0)||(ret>2)) ret=0;
+		if(ret==1) {
+			if((ret=HVTest())<0) return ret;
+			ret=0;
+		}
 	}
 	printf("\n");
 	if(ret==0) return 0;
 	if(ret==1) {
-		if(failmask&4) {
+		if(failmask&FAIL_FW) {
 			printf("\nCard firmwares are obsolete. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    0) Quit the procedure, reload new fw and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N!=1) N=0;
-			if(N==0) return 0;
+			printf("[default=1]> ");
+			ret=getchar();
+			if(ret=='\n') ret=0x31;
+			else {
+				for(;getchar()!='\n';);
+			}
+			ret-=0x30;
+			if(ret!=1) return 0;
 		}
-		if(failmask&2) {
+		if(failmask&FAIL_SN) {
 			printf("\nCard SN is not set. What do you want to do?\n");
 			printf("    pos) Write new SN and press enter\n");
 			printf("    neg) Ignore and go on\n");
 			printf("     0 ) Quit the procedure\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N==0) return 0;
-			if(N>0) {
-				if((ret=SetSN(N))<0) return ret;
+			printf("> "); scanf("%d",&ret); getchar();
+			if(ret==0) return 0;
+			if(ret>0) {
+				if((ret=SetSN(ret))<0) return ret;
 			}
 		}
-		if(failmask&8) {
+		if(failmask&FAIL_LV) {
 			printf("\nLow voltages are out of range. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N!=1) N=0;
-			if(N==0) return 0;
+			printf("[default=1]> ");
+			ret=getchar();
+			if(ret=='\n') ret=0x31;
+			else {
+				for(;getchar()!='\n';);
+			}
+			ret-=0x30;
+			if(ret!=1) return 0;
 		}
-		if(failmask&16) {
+		if(failmask&FAIL_PREAMP) {
 			printf("\nSome pre-amps are broken. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N!=1) N=0;
-			if(N==0) return 0;
+			printf("[default=1]> ");
+			ret=getchar();
+			if(ret=='\n') ret=0x31;
+			else {
+				for(;getchar()!='\n';);
+			}
+			ret-=0x30;
+			if(ret!=1) return 0;
 		}
-		if(failmask&32) {
-			printf("\nSome offsets are out of range. What do you want to do?\n");
+		if(failmask&FAIL_DC) {
+			printf("\nSome offsets are not regulated. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    2) Try to auto-calibrate DC levels\n");
-			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N<0||N>2) N=0;
-			if(N==0) return 0;
-			if(N==2) {
+			printf("    2) Auto-calibrate DC levels\n");
+			printf("    0) Quit the procedure\n");
+			printf("[default=2]> ");
+			ret=getchar();
+			if(ret=='\n') {
+				ret=0x32;
+			}
+			else {
+				for(;getchar()!='\n';);
+			}
+			ret-=0x30;
+			if((ret<=0)||(ret>2)) return 0;
+			if(ret==2) {
 				if((ret=OffCal())<0) return ret;
 			}
 		}
-		if(failmask&4096) {
+		if(failmask&FAIL_OFFSET) {
+			printf("\nSome offsets are unstable or out of range. What do you want to do?\n");
+			printf("    1) Ignore and go on\n");
+			printf("    0) Quit the procedure, check components and restart the test\n");
+			printf("[default=1]> ");
+			ret=getchar();
+			if(ret=='\n') ret=0x31;
+			else {
+				for(;getchar()!='\n';);
+			}
+			ret-=0x30;
+			if(ret!=1) return 0;
+		}
+		if(failmask&FAIL_ADC) {
 			printf("\nOne or more ADCs are broken (");
 			N=0; ret=0;
 			for(int c=0;c<6;c++) if(adcmask&(1<<c)) N++;
@@ -436,86 +305,260 @@ int FzTest::Guided() {
 			printf("). What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N!=1) N=0;
-			if(N==0) return 0;
+			printf("[default=1]> ");
+			ret=getchar();
+			if(ret=='\n') ret=0x31;
+			else {
+				for(;getchar()!='\n';);
+			}
+			ret-=0x30;
+			if(ret!=1) return 0;
 		}
-		if(failmask&64) {
+		if(failmask&FAIL_HVCALIB) {
 			printf("\nSome HV channels are not calibrated. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
-			printf("    2) Perform HV calibration procedure\n");
-			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N<0||N>2) N=0;
-			if(N==0) return 0;
-			if(N==2) {
+			if(ksock!=nullptr) printf("    2) Perform HV calibration procedure (multimeter probes must be soldered)\n");
+			printf("    0) Quit the procedure, solder probes and launch with option \"-k\"\n");
+			printf("[default=1]> ");
+			ret=getchar();
+			if(ret=='\n') ret=0x31;
+			else {
+				for(;getchar()!='\n';);
+			}
+			ret-=0x30;
+			if((ret<=0)||(ret>2)) return 0;
+			if(ret==2) {
+				if(ksock==nullptr) return 0;
 				if((ret=HVCalib())<0) return ret;
 				return 0;
 			}
-		}
-		if(failmask&128) {
-			printf("\nHV was not tested. What do you want to do?\n");
-			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure and restart the test with \"-H\" option\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N<0||N>1) N=0;
-			if(N==0) return 0;
-		}
-		if(failmask&256) {
-			printf("\nMeasured voltage is inconsistent with applied voltage. What do you want to do?\n");
-			printf("    1) Ignore and go on\n");
-			printf("    2) Perform HV calibration procedure (ADC only)\n");
-			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N<0||N>2) N=0;
-			if(N==0) return 0;
-			if(N==2) {
-				if((ret=HVCalib())<0) return ret;
-				return 0;
-			}
-		}
-		if(failmask&512) {
-			printf("\nMeasured current is not 0 without load. What do you want to do?\n");
-			printf("    1) Ignore and go on\n");
-			printf("    2) Perform HV calibration procedure (ADC only)\n");
-			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N<0||N>2) N=0;
-			if(N==0) return 0;
-			if(N==2) {
-				if((ret=HVCalib())<0) return ret;
-				return 0;
-			}
-		}
-		if(failmask&1024) {
-			printf("\nMeasured current is inconsistent with Ohm's law. What do you want to do?\n");
-			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N<0||N>1) N=0;
-			if(N==0) return 0;
-		}
-		if(failmask&2048) {
-			printf("\nHV is unstable and/or maximum voltage cannot be reached. What do you want to do?\n");
-			printf("    1) Ignore and go on\n");
-			printf("    0) Quit the procedure, check components and restart the test\n");
-			printf("> "); scanf("%d",&N); getchar();
-			if(N<0||N>1) N=0;
-			if(N==0) return 0;
 		}
 	}
 	else Manual();
 	return 0;
 }
 
+//HV extended test
+int FzTest::HVTest() {
+	int c,ret,max[4]={0,0,0,0},V[4],testmask=0;
+	double R;
+	char query[SLENG];
+	uint8_t reply[MLENG];
+	bool sim=false;
+	
+	if(!tGeneral) {
+		printf(YEL "HVTest  " NRM " fast test was not performed. Performing general check only...\n");
+		if((ret=TestGeneral())<0) return ret;
+	}
+	
+	for(c=0;c<4;c++) {
+		tHV[c]=false;
+		if((hvmask&(1<<c))==0) {
+			printf(" Channel" Mag " %s-%s" NRM " is not calibrated, skipping...\n",lChan[c%2],lFPGA[c/2]);
+		}
+		else {
+			printf(" Channel" Mag " %s-%s" NRM " is calibrated, test it [Y/n]? ",lChan[c%2],lFPGA[c/2]);
+			ret=getchar();
+			if(ret!='\n') {
+				for(;getchar()!='\n';);
+			}
+			if(ret=='\n' || ret=='y' || ret=='Y') testmask|=(1<<c);
+		}
+	}
+	if(testmask==0) return 0;
+	
+	printf("\nReady to test, HV will be applyed. Press enter to continue..."); getchar();
+	
+	//Set max voltage
+	for(c=0;c<4;c++) {
+		if((testmask&(1<<c))==0) continue;
+		tHV[c]=true;
+		max[c]=v4?maxhv4[c%2]:maxhv3[c%2];
+		sprintf(query,"%s,%d,%d",lFPGA[c/2],c%2+1,max[c]);
+		if((ret=sock->Send(blk,fee,0x92,query,reply,fVerb))) goto err;
+	}
+	
+	//Apply 20V to start (if HV is unstable it is unsafe to go further)
+	for(c=0;c<4;c++) V[c]=20;
+	if((ret=ApplyManyHV(testmask,V))<0) goto err;
+	
+	//Check voltage stability and exclude unstable channels
+	if((ret=ManyIVmeas(testmask,V20,V20var,nullptr,false))<0) goto err;
+	for(c=0;c<4;c++) {
+		if((testmask&(1<<c))==0) continue;
+		if(abs(V20[c]-20)>2 || V20var[c]>5) {
+			if((ret=ApplyHV(c,0))<0) goto err;
+			testmask&=(~(1<<c));
+		}
+	}
+	
+	//If ok, apply max voltage...
+	if((ret=ApplyManyHV(testmask,max))<0) goto err;
+	//... and check current and voltage
+	if((ret=ManyIVmeas(testmask,Vfull,Vfullvar,Ifull,true))<0) goto err;
+	//... while returning to 0V.
+	for(c=0;c<4;c++) V[c]=0;
+	if((ret=ApplyManyHV(testmask,V))<0) goto err;
+	
+	//Exclude again unstable channels
+	for(c=0;c<4;c++) {
+		if((testmask&(1<<c))==0) continue;
+		if(abs(Vfull[c]-max[c])>20 || Vfullvar[c]>5) {
+			testmask&=(~(1<<c));
+		}
+	}
+	
+	//Test current
+	printf("\nTest all channels simultaneously with 100 MOhm loads (HV will be applyed) [Y/n]> ");
+	ret=getchar();
+	if(ret!='\n') {
+		for(;getchar()!='\n';);
+	}
+	if(ret=='\n' || ret=='y' || ret=='Y') sim=true;
+	
+	if(sim) {
+		//Apply 110V
+		for(c=0;c<4;c++) V[c]=110;
+		if((ret=ApplyManyHV(testmask,V))<0) goto err;
+		//Check current
+		if((ret=ManyIVmeas(testmask,nullptr,nullptr,I1000,true))<0) goto err;
+		//Return to 0V
+		for(c=0;c<4;c++) V[c]=0;
+		if((ret=ApplyManyHV(testmask,V))<0) goto err;
+	}
+	else {
+		for(c=0;c<4;c++) {
+			if((testmask&(1<<c))==0) continue;
+			printf("\nReady to check" Mag " %s-%s " NRM "I measurement. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
+			printf("  pos) Plug the load and type its res. in MOhm\n");
+			printf("  neg) Skip the I measurement\n");
+			printf("> "); scanf("%lf",&R); getchar();
+			if(R<0) continue;
+			if(R>200) {
+				printf(YEL "HVTest  " NRM " invalid value. Skipping current check.\n");
+				continue;
+			}
+			if((ret=ApplyHV(c,(int)(R+10.5)))<0) goto err;
+			//Check current
+			if((ret=IVmeas(c,nullptr,nullptr,I1000+c,true))<0) goto err;
+			if((ret=ApplyHV(c,0))<0) goto err;
+		}
+	}
+	
+	printf("\n\n");
+	printf(BLD "                         **************************************************\n");
+	printf("                         *                 HV TEST REPORT                 *\n");
+	printf("                         **************************************************\n\n" NRM);
+	printf(BLD "      Parameter      Res.         Value         Reference  Note\n" NRM);
+	printf("----------------------------------------------------------------------------------------------------\n");
+	for(c=0;c<4;c++) {
+		if(tHV[c]==false) continue;
+		
+		printf(" %3s-%1s        (20 V) ",lChan[c%2],lFPGA[c/2]);
+		if(abs(V20[c]-20)>1 || V20var[c]>5) printf(RED "Fail" NRM);
+		else printf(GRN "Pass" NRM);
+		printf(" % 20d         20",V20[c]);
+		if(abs(V20[c]-20)>1) {
+			printf(" V mismatch");
+			failmask|=FAIL_HVADC;
+			if(V20var[c]>5) printf(" -");
+		}
+		if(V20var[c]>5) {
+			printf(" Unstable HV");
+			failmask|=FAIL_HVHARD;
+		}
+		printf("\n");
+		
+		int max=v4?maxhv4[c%2]:maxhv3[c%2];
+		if(Vfull[c]<0 || Vfullvar[c]<0) continue;
+		printf(" %3s-%1s        (Vmax) ",lChan[c%2],lFPGA[c/2]);
+		if(abs(Vfull[c]-max)>5 || Vfullvar[c]>5) printf(RED "Fail" NRM);
+		else printf(GRN "Pass" NRM);
+		printf(" % 20d        %3d",Vfull[c],max);
+		if(abs(Vfull[c]-max)>5) {
+			printf(" V mismatch");
+			failmask|=FAIL_HVADC;
+			if(Vfullvar[c]>5) printf(" -");
+		}
+		if(Vfullvar[c]>5) {
+			printf(" Unstable HV");
+			failmask|=FAIL_HVHARD;
+		}
+		printf("\n");
+		
+		if(Ifull[c]<0) continue;
+		printf(" %3s-%1s (Ioff @ Vmax) ",lChan[c%2],lFPGA[c/2]);
+		if(Ifull[c]>100) printf(RED "Fail" NRM);
+		else printf(GRN "Pass" NRM);
+		printf(" % 20d       <100",Ifull[c]);
+		if(Ifull[c]>100) {
+			printf(" Bad I offset");
+			failmask|=FAIL_HVADC;
+		}
+		printf("\n");
+		
+		if(I1000[c]<0) continue;
+		printf(" %3s-%1s (Iref=1000nA) ",lChan[c%2],lFPGA[c/2]);
+		if(abs(I1000[c]-1000)>100) printf(RED "Fail" NRM);
+		else printf(GRN "Pass" NRM);
+		printf(" % 20d       1000",I1000[c]);
+		if(abs(I1000[c]-1000)>100) {
+			printf(" Bad I reading");
+			failmask|=FAIL_HVHARD;
+		}
+		printf("\n");
+		
+	}
+	printf("----------------------------------------------------------------------------------------------------\n\n");
+	
+	
+	if(failmask&FAIL_HVADC) {
+		printf("\nMeasured voltage and/or current are inconsistent with expected values. What do you want to do?\n");
+		printf("    1) Ignore and go on\n");
+		printf("    2) Perform HV calibration procedure (ADC only)\n");
+		printf("    0) Quit the procedure, check components and restart the test\n");
+		printf("[default=1]> ");
+		ret=getchar();
+		if(ret=='\n') ret=0x31;
+		else {
+			for(;getchar()!='\n';);
+		}
+		ret-=0x30;
+		if((ret<0)||(ret>2)) ret=0;
+		if(ret==0) return 0;
+		if(ret==2) {
+			if((ret=HVCalib())<0) return ret;
+			return 0;
+		}
+	}
+	if(failmask&FAIL_HVHARD) {
+		printf("\nBad HV behaviour probably due to hardware issues. What do you want to do?\n");
+		printf("    1) Ignore and go on\n");
+		printf("    0) Quit the procedure, check components and restart the test\n");
+		printf("[default=1]> ");
+		ret=getchar();
+		if(ret=='\n') ret=0x31;
+		else {
+			for(;getchar()!='\n';);
+		}
+		ret-=0x30;
+		if(ret!=1) ret=0;
+		if(ret==0) return 0;
+	}
+	
+	return 0;
+	err:
+	printf(RED "HVTest  " NRM " test failed! Applying 0 V to all channels...\n");
+	//forcing return to 0V to all channels
+	for(c=0;c<4;c++) ApplyManyHV(15,0);
+	return ret;
+}
+
 //Public: manual resolution
 int FzTest::Manual() {
 	int tmp,ret,N;
 	
-	if(failmask&1) {
-		printf("\nCard temperature is high. Please check cooling and restart the test...\n\n");
-		return 0;
-	}
+	if(!fInit) Init();
 	do {
 		printf("\nOperation menu\n");
 		printf("    1) Set new serial number\n");
@@ -523,12 +566,10 @@ int FzTest::Manual() {
 		printf("    3) Plot offset calibration curve\n");
 		printf("    4) Offset manual test\n");
 		printf("    5) HV calibration\n");
-		printf("    6) HV manual test\n");
-		printf("    7) Send manual SC command (not implemented)\n");
-		if(fTested) printf("    8) Repeat the fast test\n");
-		else printf("    8) Perform the fast test\n");
-		if(fTested) printf("    9) Repeat the fast test with HV check\n");
-		else printf("    9) Perform the fast test with HV check\n");
+		printf("    6) HV guided test\n");
+		printf("    7) HV manual test\n");
+		printf("    8) Send manual SC command (not implemented yet)\n");
+		printf("    9) General fast test\n");
 		printf("    0) Quit\n");
 		printf("> "); scanf("%d",&tmp); getchar();
 		if((tmp>9)||(tmp<0)) tmp=0;
@@ -551,11 +592,13 @@ int FzTest::Manual() {
 				tmp=0;
 				break;
 			case 6:
+				if((ret=HVTest())<0) return ret;
+				break;
+			case 7:
 				if((ret=HVManual())<0) return ret;
 				break;
-			case 8: case 9:
-				if((ret=FastTest((tmp==8)?false:true))<0) return ret;
-				Report();
+			case 9:
+				if((ret=FastTest(true))<0) return ret;
 				break;
 		}
 	}
@@ -632,6 +675,7 @@ int FzTest::OffCal() {
 				}
 			}
 			dac=dac1+(int)(0.5+((double)(target-bl1))*((double)(dac2-dac1))/((double)(bl2-bl1)));
+			if((dac<0) || (dac>1023)) {ierr=2; break;}
 			if((abs(dac2-dac1)<10) || (abs(Bl-target)<20)) break;
 			if((i>=5) || ierr) break;
 			
@@ -666,9 +710,7 @@ int FzTest::OffCal() {
 	if((ret=sock->Send(blk,fee,0x8E,"",reply,fVerb))) return ret;
 	
 	//Testing new BL values
-	for(ch=0;ch<12;ch++) {
-		if((ret=OffCheck(ch))<0) return ret;
-	}
+	if((ret=TestAnalog())<0) return ret;
 	return 0;
 }
 
@@ -765,115 +807,6 @@ int FzTest::OffManual() {
 }
 
 //HV functions
-//HV extended test
-int FzTest::HVTest() {
-	int c,ret,max[4]={0,0,0,0},V[4],testmask=0;
-	double R;
-	char query[SLENG];
-	uint8_t reply[MLENG];
-	bool sim=false;
-	
-	if(!fTested) printf(YEL "HVTest  " NRM " fast test was not performed. Performing HV check only...\n");
-	if((ret=LVHVTest())<0) return ret;
-	
-	for(c=0;c<4;c++) {
-		if((hvmask&(1<<c))==0) {
-			printf(" Channel" Mag " %s-%s" NRM " is not calibrated, skipping...\n",lChan[c%2],lFPGA[c/2]);
-		}
-		else {
-			printf(" Channel" Mag " %s-%s" NRM " is calibrated, test it [Y/n]? ",lChan[c%2],lFPGA[c/2]);
-			
-			ret=getchar();
-			if(ret!='\n') {
-				for(;getchar()!='\n';);
-			}
-			if(ret=='\n' || ret=='y' || ret=='Y') testmask|=(1<<c);
-		}
-	}
-	if(testmask==0) return 0;
-	printf("\nReady to test, HV will be applyed. Press enter to continue..."); getchar();
-	
-	//Set max voltage
-	for(c=0;c<4;c++) {
-		if((testmask&(1<<c))==0) continue;
-		max[c]=v4?maxhv4[c%2]:maxhv3[c%2];
-		sprintf(query,"%s,%d,%d",lFPGA[c/2],c%2+1,max[c]);
-		if((ret=sock->Send(blk,fee,0x92,query,reply,fVerb))) goto err;
-	}
-	
-	//Apply 20V to start (if HV is unstable it is unsafe to go further)
-	for(c=0;c<4;c++) V[c]=20;
-	if((ret=ApplyManyHV(testmask,V))<0) goto err;
-	
-	//Check voltage stability and exclude unstable channels
-	if((ret=ManyIVmeas(testmask,V20,V20var,nullptr,false))<0) goto err;
-	for(c=0;c<4;c++) {
-		if(abs(V20[c]-20)>2 || V20var[c]>5) {
-			if((ret=ApplyHV(c,0))<0) goto err;
-			testmask&=(~(1<<c));
-		}
-	}
-	
-	//If ok, apply max voltage...
-	if((ret=ApplyManyHV(testmask,max))<0) goto err;
-	//... and check current and voltage
-	if((ret=ManyIVmeas(testmask,Vfull,Vfullvar,Ifull,true))<0) goto err;
-	//... while returning to 0V.
-	for(c=0;c<4;c++) V[c]=0;
-	if((ret=ApplyManyHV(testmask,V))<0) goto err;
-	
-	//Exclude again unstable channels
-	for(c=0;c<4;c++) {
-		if((testmask&(1<<c))==0) continue;
-		if(abs(Vfull[c]-max[c])>20 || Vfullvar[c]>5) {
-			testmask&=(~(1<<c));
-		}
-	}
-	
-	//Test current
-	printf("\nTest all channels simultaneously with 100 MOhm loads (HV will be applyed) [Y/n]> ");
-	ret=getchar();
-	if(ret!='\n') {
-		for(;getchar()!='\n';);
-	}
-	if(ret=='\n' || ret=='y' || ret=='Y') sim=true;
-	
-	if(sim) {
-		//Apply 110V
-		for(c=0;c<4;c++) V[c]=110;
-		if((ret=ApplyManyHV(testmask,V))<0) goto err;
-		//Check current
-		if((ret=ManyIVmeas(testmask,nullptr,nullptr,I1000,true))<0) goto err;
-		//Return to 0V
-		for(c=0;c<4;c++) V[c]=0;
-		if((ret=ApplyManyHV(testmask,V))<0) goto err;
-	}
-	else {
-		for(c=0;c<4;c++) {
-			if((testmask&(1<<c))==0) continue;
-			printf("\nReady to check" Mag " %s-%s " NRM "I measurement. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
-			printf("  pos) Plug the load and type its res. in MOhm\n");
-			printf("  neg) Skip the I measurement\n");
-			printf("> "); scanf("%lf",&R); getchar();
-			if(R<0) continue;
-			if(R>200) {
-				printf(YEL "OffCal  " NRM " invalid value. Skipping current check.\n");
-				continue;
-			}
-			if((ret=ApplyHV(c,(int)(R+10.5)))<0) goto err;
-			//Check current
-			if((ret=IVmeas(c,nullptr,nullptr,I1000+c,true))<0) goto err;
-			if((ret=ApplyHV(c,0))<0) goto err;
-		}
-	}
-	
-	return 0;
-	err:
-	//forcing return to 0V to all channels
-	for(c=0;c<4;c++) ApplyHV(c,0);
-	return ret;
-}
-
 //HV calibration!
 int FzTest::HVCalib() {
 	int c,ret,max;
@@ -881,8 +814,10 @@ int FzTest::HVCalib() {
 	uint8_t reply[MLENG];
 	bool dac=false;
 	
-	if(!fTested) printf(YEL "HVCalib " NRM " fast test was not performed. Performing HV check only...\n");
-	if((ret=LVHVTest())<0) return ret;
+	if(!tGeneral) {
+		printf(YEL "HVCalib " NRM " fast test was not performed. Performing general check only...\n");
+		if((ret=TestGeneral())<0) return ret;
+	}
 	
 	for(c=0;c<4;c++) {
 		if(hvmask&(1<<c)) printf(Mag "\n%s-%s" NRM " is already calibrated. What do you want to do?\n",lChan[c%2],lFPGA[c/2]);
@@ -929,7 +864,7 @@ int FzTest::HVCalib() {
 		
 		//Calibrate!
 		if((ret=HVCalChan(c,max,dac))<0) return ret;
-		fCalib=true;
+		tCalib=true;
 	}
 	max=0;
 	for(c=0;c<4;c++) {
@@ -945,8 +880,10 @@ int FzTest::HVManual() {
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
-	if(!fTested) printf(YEL "HVManual" NRM " fast test was not performed. Performing HV check only...\n");
-	if((ret=LVHVTest())<0) return ret;
+	if(!tGeneral) {
+		printf(YEL "HVManual" NRM " fast test was not performed. Performing general check only...\n");
+		if((ret=TestGeneral())<0) return ret;
+	}
 	
 	printf("\nWhich channel do you want to test?\n");
 	printf("    0) Si1-A\n");
@@ -1103,6 +1040,7 @@ void FzTest::UpdateDB() {
 	FullRead(filename);
 	
 	//GENERAL INFORMATION
+	if(tGeneral == false) goto loganalog;
 	sprintf(filename,"%s/general.txt",dirname);
 	f=fopen(filename,"r");
 	if(f!=NULL) {
@@ -1193,7 +1131,9 @@ void FzTest::UpdateDB() {
 	}
 	fclose(f);
 	
+	loganalog:
 	//ANALOG CHAIN INFORMATION
+	if(tAnalog == false) goto logHV;
 	sprintf(filename,"%s/analog.txt",dirname);
 	f=fopen(filename,"r");
 	if(f!=NULL) {
@@ -1246,6 +1186,8 @@ void FzTest::UpdateDB() {
 	}
 	fclose(f);
 	
+	logHV:
+	if((tHV[0] || tHV[1] || tHV[2] || tHV[3]) == false) goto logCalib;
 	//HV TEST OUTPUT
 	sprintf(filename,"%s/hvtest.txt",dirname);
 	f=fopen(filename,"r");
@@ -1297,8 +1239,9 @@ void FzTest::UpdateDB() {
 	}
 	fclose(f);
 	
+	logCalib:
 	//HV CALIBRATION DATA
-	if(!fCalib) goto fine;
+	if(!tCalib) goto fine;
 	sprintf(filename,"%s/hvcalib.txt",dirname);
 	f=fopen(filename,"r");
 	if(f!=NULL) {

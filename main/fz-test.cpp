@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 08/02/2021                          *
+*                         Simone Valdre' - 11/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -9,11 +9,11 @@
 
 int main(int argc, char *argv[]) {
 	int c,ret,tmp,blk=0,fee=0,dump=0;
-	bool verb=false,serial=true,keith=false,autom=true,power=false,hv=false;
+	bool verb=false,serial=true,keith=false,autom=true,power=false;
 	char device[SLENG]="/dev/ttyUSB0",kdevice[SLENG]="/dev/ttyUSB1",hname[SLENG]="regboard0",romfile[MLENG]="";
 	
 	//Decode options
-	while((c=getopt(argc,argv,"hvmPud:n:k:b:f:Hr:w:"))!=-1) {
+	while((c=getopt(argc,argv,"hvmpud:n:k:b:f:r:w:"))!=-1) {
 		switch(c) {
 			case 'v':
 				verb=true;
@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
 			case 'm':
 				autom=false;
 				break;
-			case 'P':
+			case 'p':
 				power=true;
 				break;
 			case 'd':
@@ -45,7 +45,6 @@ int main(int argc, char *argv[]) {
 				if(optarg!=NULL) tmp=atoi(optarg);
 				if(tmp>=0 && tmp<8) fee=tmp;
 				break;
-			case 'H': hv=true; break;
 			case 'r':
 				if(optarg!=NULL && strlen(optarg)<MLENG) strcpy(romfile,optarg);
 				dump= 1;
@@ -60,14 +59,13 @@ int main(int argc, char *argv[]) {
 				printf("    -h         this help\n");
 				printf("    -v         enable verbose output\n");
 				printf("    -m         manual operation (skip automatic checks)\n");
-				printf("    -P         power on FEEs (necessary when using block configuration)\n");
+				printf("    -p         power on FEEs (necessary when using block configuration)\n");
 				printf("    -u         use UDP protocol (via RB) [by default direct RS232 is used]\n");
 				printf("    -d <dev>   specify the FEE serial device (used only without UDP) [default: /dev/ttyUSB0]\n");
 				printf("    -n <dev>   specify the RB hostname (used only with UDP) [default: regboard0]\n");
 				printf("    -k <dev>   specify the Keithley 2000 device [default: disabled]\n");
 				printf("    -b <blk>   specify the block ID [0-3584, default: 0]\n");
 				printf("    -f <fee>   specify the FEE ID   [0-   7, default: 0]\n");
-				printf("    -H         test HV outputs (WARNING: don't touch the card and be sure that no detector is connected!)\n");
 				printf("    -r <file>  read all the EEPROM data and dump it to a file\n");
 				printf("    -w <file>  write a file content to the EEPROM (line structure: \"<address (DEC)> <content (HEX)>\")\n");
 				printf("\n");
@@ -117,9 +115,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	else if(autom) {
-		if((ret=test.FastTest(hv))<0) goto err;
-		test.Report();
-		if((ret=test.Guided())<0) goto err;
+		if((ret=test.FastTest())<0) goto err;
 	}
 	else {
 		if((ret=test.Manual())<0) goto err;

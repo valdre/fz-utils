@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 08/02/2021                          *
+*                         Simone Valdre' - 11/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -10,11 +10,12 @@
 
 //Constructor and destructor
 FzTest::FzTest(FzSC *sck, const int Blk, const int Fee, const bool verbose) {
-	sock=sck; ksock=nullptr;
-	blk=Blk; fee=Fee;
-	fVerb=verbose;
-	
-	Init();
+	sock  = sck;
+	ksock = nullptr;
+	blk   = Blk;
+	fee   = Fee;
+	fVerb = verbose;
+	fInit = false;
 }
 
 FzTest::~FzTest() {
@@ -30,7 +31,7 @@ FzTestRef::FzTestRef() {
 	strcpy(vPIC,"");
 	for(c=0;c<2;c++) strcpy(vFPGA[c],"");
 	for(c=0;c<19;c++) lv[c]=-1;
-	gomask=0;
+	gomask=-1; adcmask=-1;
 	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000;}
 	for(c=0;c<6;c++) {dacoff[c]=-1; dcreact[c]=-1;}
 	hvmask=-1;
@@ -47,14 +48,13 @@ FzTestRef::~FzTestRef() {
 void FzTest::Init() {
 	int c;
 	
-	fTested=false;
-	fCalib=false;
+	failmask=0;
 	v4=-1; sn=-1;
 	for(c=0;c<6;c++) temp[c]=-1;
 	strcpy(vPIC,"");
 	for(c=0;c<2;c++) strcpy(vFPGA[c],"");
 	for(c=0;c<19;c++) lv[c]=-1;
-	gomask=0;
+	gomask=-1; adcmask=-1;
 	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000;}
 	for(c=0;c<6;c++) {dacoff[c]=-1; dcreact[c]=-1;}
 	hvmask=-1;
@@ -64,8 +64,12 @@ void FzTest::Init() {
 		Vp0[c]=-99; Vp1[c]=-99; Ip0[c]=-99; Ip1[c]=-99;
 		tcal[c]=-1;
 	}
-	failmask=0;
-	adcmask=0;
+	
+	fInit    = true;
+	tGeneral = false;
+	tAnalog  = false;
+	for(c=0;c<4;c++) tHV[c] = false;
+	tCalib   = false;
 	return;
 }
 
@@ -76,11 +80,16 @@ void FzTest::KeithleySetup(FzSC *sck) {
 	char reply[MLENG];
 	
 	ksock=sck;
-	if(sck==nullptr) return;
+	if(sck==nullptr) {
+		printf(RED "Keithley" NRM " socket not set!");
+		return;
+	}
+	
+	if(!fVerb) printf(BLD "Keithley" NRM " configuring device...\n");
 	
 	//Reset Keithley
 	if((ret=ksock->KSend("*RST",nullptr,false))<0) goto err;
-	usleep(500000); //Immediately after reset the Keithltey is not ready to accept any command
+	sleep(1); //Immediately after reset the Keithltey is not ready to accept any command
 	
 	//Check if Keithley answers correctly
 	if((ret=ksock->KSend("*IDN?",reply,false))<0) goto err;
@@ -95,7 +104,10 @@ void FzTest::KeithleySetup(FzSC *sck) {
 	if((ret=ksock->KSend(":Sens:Func 'volt:dc'",nullptr,false))<0) goto err;
 	return;
 	
+	if(!fVerb) printf(UP GRN "Keithley" NRM " device configured.     \n");
+	
 	err:
+	if(!fVerb) printf(UP RED "Keithley" NRM " configuration failed.    \n");
 	delete ksock;
 	ksock=nullptr;
 	return;
@@ -144,6 +156,116 @@ int FzTest::GetVoltage(double *V, double *Vvar, const bool wait) {
 	if(V!=nullptr) *V=old/5.;
 	if(Vvar!=nullptr) *Vvar=max-min;
 	return dir;
+}
+
+//Fast general checks
+int FzTest::TestGeneral() {
+	int c,N,ret,itmp[8];
+	uint8_t reply[MLENG];
+	float ftmp[3];
+	
+	tGeneral=false;
+	printf("Performing general check...\n");
+	
+	//Get serial number
+	if((ret=sock->Send(blk,fee,0xA5,"Q",reply,fVerb))) return ret;
+	if(sscanf((char *)reply,"0|%d",&sn)!=1) return -20;
+	
+	//Get PIC firmware version
+	if((ret=sock->Send(blk,fee,0x8B,"",reply,fVerb))) return ret;
+	if(sscanf((char *)reply,"0|%d,%d,%d,V%*d",itmp,itmp+1,itmp+2)!=3) return -20;
+	sprintf(vPIC,"%02d/%02d/%04d",itmp[0],itmp[1],itmp[2]);
+	
+	//Get FPGA firmware version
+	for(c=0;c<2;c++) {
+		if((ret=sock->Send(blk,fee,0x8C,lFPGA[c],reply,fVerb))) return ret;
+		if(sscanf((char *)reply,"0|tel=%*c,day=%d,month=%d,year=%d,variant=%*d",itmp,itmp+1,itmp+2)!=3) return -20;
+		else sprintf(vFPGA[c],"%02d/%02d/%04d",itmp[0],itmp[1],itmp[2]);
+	}
+	
+	//Get temperatures
+	if((ret=sock->Send(blk,fee,0x83,"",reply,fVerb))) return ret;
+	if(sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d",temp,temp+1,temp+2,temp+3,temp+4,temp+5)<6) return -20;
+	
+	//Get LV values and card version
+	if((ret=sock->Send(blk,fee,0x9B,"",reply,fVerb))) return ret;
+	for(c=0;reply[c];c++) if(reply[c]==0x2c) reply[c]=0x2e; // ',' -> '.' (sscanf doesn't accept ',' as decimal separator)
+	if(sscanf((char *)reply,"0|v:%f %f %f",ftmp,ftmp+1,ftmp+2)!=3) return -20;
+	for(c=0;c<3;c++) lv[c]=(int)(ftmp[c]*1000+0.5);
+	if((ret=sock->Send(blk,fee,0x9C,"",reply,fVerb))) return ret;
+	N=sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d,%d,%d",itmp,itmp+1,itmp+2,itmp+3,itmp+4,itmp+5,itmp+6,itmp+7);
+	if(N==8) {
+		v4=1;
+		lv[4] =itmp[0]; lv[9] =itmp[1]; lv[6] =itmp[2]; lv[11]=itmp[3];
+		lv[3] =itmp[4]; lv[8] =itmp[5]; lv[5] =itmp[6]; lv[10]=itmp[7];
+	}
+	else if(N==4) {
+		v4=0;
+		lv[9] =itmp[0]; lv[11]=itmp[1]; lv[8] =itmp[2]; lv[10]=itmp[3];
+		lv[3]=lv[4]=lv[5]=lv[6]=-2;
+	}
+	else return -20;
+	if((ret=sock->Send(blk,fee,0x9D,"",reply,fVerb))) return ret;
+	if(sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d,%d,%d",itmp,itmp+1,itmp+2,itmp+3,itmp+4,itmp+5,itmp+6,itmp+7)!=8) return -20;
+	lv[15]=itmp[0]; lv[16]=itmp[1]; lv[14]=itmp[2]; lv[13]=itmp[3];
+	lv[18]=itmp[4]; lv[17]=itmp[5]; lv[12]=itmp[6]; lv[7] =itmp[7];
+	
+	//HV calibration status
+	if((ret=sock->Send(blk,fee,0x94,"",reply,fVerb))) return ret;
+	ret=strlen((char *)reply);
+	if((ret>=3)&&(reply[2]>=0x30)&&(reply[2]<=0x39)) {
+		N=reply[2]-0x30;
+		if((N<=4)&&(ret==3+3*N)) {
+			hvmask=0;
+			for(c=0;c<N;c++) {
+				if(reply[4+3*c]==0x41 && reply[5+3*c]==0x31) hvmask|=1;
+				else if(reply[4+3*c]==0x41 && reply[5+3*c]==0x32) hvmask|=2;
+				else if(reply[4+3*c]==0x42 && reply[5+3*c]==0x31) hvmask|=4;
+				else if(reply[4+3*c]==0x42 && reply[5+3*c]==0x32) hvmask|=8;
+				else {
+					hvmask=-1; break;
+				}
+			}
+		}
+	}
+	
+	tGeneral=true;
+	printf(UP "                                      \n" UP);
+	return 0;
+}
+
+int FzTest::TestAnalog() {
+	int c,N,ret;
+	char query[SLENG];
+	uint8_t reply[MLENG];
+	
+	tAnalog=false;
+	printf("Testing analog chains...\n");
+	
+	//Test pre-amp
+	gomask=0;
+	for(c=0;c<6;c++) {
+		sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+1);
+		if((ret=sock->Send(blk,fee,0x98,query,reply,fVerb))) return ret;
+		ret=sscanf((char *)reply,"0|%d",&N);
+		if(ret!=1) return -20;
+		if(N) gomask|=(1<<c);
+	}
+	
+	//Test baseline offset
+	for(c=0;c<12;c++) {
+		if((ret=OffCheck(c))<0) return ret;
+	}
+	
+	// ADC status
+	adcmask=0;
+	for(c=0;c<6;c++) {
+		if((((gomask)&(1<<c))>>c)==0 && blvar[c2ch[c]]==0) adcmask|=(1<<c);
+	}
+	
+	tAnalog=true;
+	printf(UP "                                      \n" UP);
+	return 0;
 }
 
 //Set serial number
@@ -228,58 +350,6 @@ int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
 		return 0;
 	}
 	return -20;
-}
-
-//Fast LV and HV checks
-int FzTest::LVHVTest() {
-	int c,N,ret,itmp[8];
-	uint8_t reply[MLENG];
-	float ftmp[3];
-	
-	//Get LV values and card version
-	if((ret=sock->Send(blk,fee,0x9B,"",reply,fVerb))) return ret;
-	for(c=0;reply[c];c++) if(reply[c]==0x2c) reply[c]=0x2e; // ',' -> '.' (sscanf doesn't accept ',' as decimal separator)
-	N=sscanf((char *)reply,"0|v:%f %f %f",ftmp,ftmp+1,ftmp+2);
-	if(N!=3) return -20;
-	for(c=0;c<3;c++) lv[c]=(int)(ftmp[c]*1000+0.5);
-	if((ret=sock->Send(blk,fee,0x9C,"",reply,fVerb))) return ret;
-	N=sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d,%d,%d",itmp,itmp+1,itmp+2,itmp+3,itmp+4,itmp+5,itmp+6,itmp+7);
-	if(N==8) {
-		v4=1;
-		lv[4] =itmp[0]; lv[9] =itmp[1]; lv[6] =itmp[2]; lv[11]=itmp[3];
-		lv[3] =itmp[4]; lv[8] =itmp[5]; lv[5] =itmp[6]; lv[10]=itmp[7];
-	}
-	else if(N==4) {
-		v4=0;
-		lv[9] =itmp[0]; lv[11]=itmp[1]; lv[8] =itmp[2]; lv[10]=itmp[3];
-		lv[3]=lv[4]=lv[5]=lv[6]=-2;
-	}
-	else return -20;
-	if((ret=sock->Send(blk,fee,0x9D,"",reply,fVerb))) return ret;
-	N=sscanf((char *)reply,"0|%d,%d,%d,%d,%d,%d,%d,%d",itmp,itmp+1,itmp+2,itmp+3,itmp+4,itmp+5,itmp+6,itmp+7);
-	if(N!=8) return -20;
-	lv[15]=itmp[0]; lv[16]=itmp[1]; lv[14]=itmp[2]; lv[13]=itmp[3];
-	lv[18]=itmp[4]; lv[17]=itmp[5]; lv[12]=itmp[6]; lv[7] =itmp[7];
-	
-	//HV calibration status
-	if((ret=sock->Send(blk,fee,0x94,"",reply,fVerb))) return ret;
-	ret=strlen((char *)reply);
-	if((ret>=3)&&(reply[2]>=0x30)&&(reply[2]<=0x39)) {
-		N=reply[2]-0x30;
-		if((N<=4)&&(ret==3+3*N)) {
-			hvmask=0;
-			for(c=0;c<N;c++) {
-				if(reply[4+3*c]==0x41 && reply[5+3*c]==0x31) hvmask|=1;
-				else if(reply[4+3*c]==0x41 && reply[5+3*c]==0x32) hvmask|=2;
-				else if(reply[4+3*c]==0x42 && reply[5+3*c]==0x31) hvmask|=4;
-				else if(reply[4+3*c]==0x42 && reply[5+3*c]==0x32) hvmask|=8;
-				else {
-					hvmask=-1; break;
-				}
-			}
-		}
-	}
-	return 0;
 }
 
 //HV functions
@@ -949,8 +1019,10 @@ int FzTest::FullRead(const char *filename) {
 		return -50;
 	}
 	
-	if(!fTested) printf(YEL "FullRead" NRM " fast test was not performed. Performing version check only...\n");
-	if((ret=LVHVTest())<0) goto err;
+	if(!tGeneral) {
+		printf(YEL "FullRead" NRM " fast test was not performed. Performing general check only...\n");
+		if((ret=TestGeneral())<0) goto err;
+	}
 	lastr=v4?655:303;
 	
 	if(!fVerb) printf("\n");
@@ -977,8 +1049,10 @@ int FzTest::FullWrite(const char *filename) {
 		return -50;
 	}
 	
-	if(!fTested) printf(YEL "FullWrit" NRM " fast test was not performed. Performing version check only...\n");
-	if((ret=LVHVTest())<0) goto err;
+	if(!tGeneral) {
+		printf(YEL "FullWrit" NRM " fast test was not performed. Performing general check only...\n");
+		if((ret=TestGeneral())<0) goto err;
+	}
 	lastr=v4?655:303;
 	
 	for(N=0;fgets(row,SLENG,f);N++);

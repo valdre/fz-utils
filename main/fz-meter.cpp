@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/12/2020                          *
+*                         Simone Valdre' - 22/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -201,8 +201,8 @@ int main(int argc, char **argv) {
 	else {
 		if(pproc==0) { //processo figlio
 			double trig[12],time;
-			int bitmask;
-			FzSC sock;
+			int bitmask,lock=0;
+			FzSC sock(lock);
 			close(pd[0]);
 			signal(SIGUSR2,handle_usr2);
 			go=1;

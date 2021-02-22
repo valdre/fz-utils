@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 11/02/2021                          *
+*                         Simone Valdre' - 22/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -56,7 +56,10 @@ void FzTest::Init() {
 	for(c=0;c<19;c++) lv[c]=-1;
 	gomask=-1; adcmask=-1;
 	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000;}
-	for(c=0;c<6;c++) {dacoff[c]=-1; dcreact[c]=-1;}
+	for(c=0;c<6;c++) {
+		dacoff[c]=-1; dcreact[c]=-1;
+		for(int i=0;i<103;i++) offmatrix[c][i]=-1;
+	}
 	hvmask=-1;
 	for(c=0;c<4;c++) {
 		V20[c]=-1; V20var[c]=-1; Vfull[c]=-1; Vfullvar[c]=-1; Ifull[c]=-1; I1000[c]=-1;
@@ -68,6 +71,7 @@ void FzTest::Init() {
 	fInit    = true;
 	tGeneral = false;
 	tAnalog  = false;
+	tCurve   = false;
 	for(c=0;c<4;c++) tHV[c] = false;
 	tCalib   = false;
 	return;
@@ -345,7 +349,7 @@ int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
 		}
 	}
 	if(N==tries) {
-		if(Bl!=nullptr) *Bl=(int)(0.5+av/((double)N));
+		if(Bl!=nullptr) *Bl=(int)round(av/((double)N));
 		if(Blvar!=nullptr) *Blvar=max-min;
 		return 0;
 	}

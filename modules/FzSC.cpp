@@ -1,39 +1,101 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/12/2020                          *
+*                         Simone Valdre' - 22/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
 
 #include "FzSC.h"
 
-FzSC::FzSC(const bool serial, const char *target, const bool keithley) {
+FzSC::FzSC(int &lockmask, const bool serial, const char *target, const bool keithley, const int blk,  const int fee) {
+	int i;
+	char name[SLENG],kreply[MLENG];
+	uint8_t reply[MLENG];
+	struct stat st;
+	
 	fSockOK=false;
-	if(keithley) {
-		//Serial communication with Keithley 2000 multimeter
-		fKeith=true;
-		if(serial) {
-			fSerial=true;
-			if(TTYOpen(target, B19200)>=0) fSockOK=true;
-		}
+	if(keithley) fKeith=true;
+	else fKeith=false;
+	fBC=false;
+	
+	name[0]='\0';
+	if(!serial) {
+		fSerial=false;
+		if(keithley) printf(RED "FzSC    " NRM " Keithley only supports serial connection\n");
 		else {
-			fSerial=false;
-			printf(RED "FzSC    " NRM " Keithley only supports serial connection\n");
+			if(target==nullptr) strcpy(name,RBNAME);
+			else strcpy(name,target);
+			fKeith=false;
+			//UDP communication with FEE/BC/RB (via RB)
+			if(UDPOpen(name)>=0) fSockOK=true;
+			else printf(RED "FzSC    " NRM " UDP socket creation failed\n");
 		}
-	}
-	else if(serial) {
-		//Serial communication with FEE (via ERNI connector or block card)
-		fKeith=false;
-		fSerial=true;
-		if(TTYOpen(target, B115200)>=0) fSockOK=true;
 	}
 	else {
-		//UDP communication with FEE/BC/RB (via RB)
-		fKeith=false;
 		fSerial=true;
-		if(UDPOpen(target)>=0) fSockOK=true;
+		if(target==nullptr) printf(BLD "FzSC    " NRM " TTY auto recognition...\n");
+		else printf("\n");
+		for(i=0;i<10;i++) {
+			if(lockmask&(1<<i)) continue;
+			if(target==nullptr) sprintf(name,"/dev/ttyUSB%d",i);
+			else strcpy(name,target);
+			if(stat(name,&st)<0) {
+				if(target==nullptr) continue;
+				else break;
+			}
+			if(keithley) {
+				//Serial communication with Keithley 2000 multimeter
+				if(TTYOpen(name, B19200)>=0) {
+					fSockOK=true;
+					//Reset Keithley
+					if(KSend("*RST",nullptr,false)<0) {
+						fSockOK=false;
+						close(sockfd);
+						if(target==nullptr) continue;
+						else break;
+					}
+					sleep(1); //Immediately after reset the Keithltey is not ready to accept any command
+					//Check if Keithley answers correctly
+					if(KSend("*IDN?",kreply,false,true)<0) {
+						fSockOK=false;
+						close(sockfd);
+						if(target==nullptr) continue;
+						else break;
+					}
+					if(strncmp(kreply,"KEITHLEY INSTRUMENTS INC.",25)) {
+						fSockOK=false;
+						close(sockfd);
+						if(target==nullptr) continue;
+						else break;
+					}
+					break;
+				}
+			}
+			else {
+				//Serial communication with FEE (via ERNI connector or block card)
+				if(TTYOpen(name, B115200)>=0) {
+					fSockOK=true;
+					//Check if FEE or PS answers correctly
+					if(Send(blk,fee,0xA5,"Q",reply,false,true)<0) {
+						if(Send(blk,8,0x85,"",reply,false,true)<0) {
+							fSockOK=false;
+							close(sockfd);
+							if(target==nullptr) continue;
+							else break;
+						}
+						else fBC=true;
+					}
+					break;
+				}
+			}
+			if(target!=nullptr) break;
+		}
+		if(!fSockOK) printf(UP RED "FzSC    " NRM " TTY opening failed        \n");
+		else {
+			printf(UP GRN "FzSC    " NRM " TTY opened at %s (%s)\n",name,fKeith?"Keithley":"FEE");
+			lockmask|=(1<<i);
+		}
 	}
-	if(!fSockOK) printf(RED "FzSC    " NRM " Socket or TTY opening failed\n");
 }
 
 FzSC::~FzSC() {
@@ -214,7 +276,7 @@ int FzSC::UDPOpen(const char *ndst) {
 	return 0;
 }
 
-int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/*=0*/) {
+int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/*=0*/, bool nowait/*=false*/) {
 	//Check file descriptor
 	if(!fSockOK) {
 		printf(RED "Send    " NRM " socket is not open\n");
@@ -348,6 +410,7 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 		}
 		if(fSerial) tcflush(sockfd,TCIOFLUSH);
 		else ret=recvfrom(sockfd,(void *)reply,100000,MSG_DONTWAIT,&src,&dim);
+		if(nowait) break;
 	}
 	if(err==-10) {
 		fSockOK=false;
@@ -398,7 +461,7 @@ int FzSC::Meter(double *time,double *trig,int *bitmask) {
 	return 0;
 }
 
-int FzSC::KSend(const char *data,char *reply,int verb/*=0*/) {
+int FzSC::KSend(const char *data,char *reply,int verb/*=0*/,bool nowait/*=false*/) {
 	//Check file descriptor
 	if(!fSockOK) {
 		printf(RED "KSend   " NRM " socket is not open\n");
@@ -471,6 +534,7 @@ int FzSC::KSend(const char *data,char *reply,int verb/*=0*/) {
 				break;
 		}
 		tcflush(sockfd,TCIOFLUSH);
+		if(nowait) break;
 	}
 	if(err==-10) {
 		fSockOK=false;
@@ -484,4 +548,8 @@ int FzSC::KSend(const char *data,char *reply,int verb/*=0*/) {
 
 bool FzSC::SockOK() {
 	return fSockOK;
+}
+
+bool FzSC::IsBC() {
+	return fBC;
 }

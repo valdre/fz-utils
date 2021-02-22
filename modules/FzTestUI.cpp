@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 11/02/2021                          *
+*                         Simone Valdre' - 22/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -282,6 +282,7 @@ int FzTest::FastTest(bool man) {
 		if(failmask&FAIL_OFFSET) {
 			printf("\nSome offsets are unstable or out of range. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
+			printf("    2) Run a DAC-offset curve test\n");
 			printf("    0) Quit the procedure, check components and restart the test\n");
 			printf("[default=1]> ");
 			ret=getchar();
@@ -290,7 +291,10 @@ int FzTest::FastTest(bool man) {
 				for(;getchar()!='\n';);
 			}
 			ret-=0x30;
-			if(ret!=1) return 0;
+			if((ret<=0)||(ret>2)) return 0;
+			if(ret==2) {
+				if((ret=OffCurve())<0) return ret;
+			}
 		}
 		if(failmask&FAIL_ADC) {
 			printf("\nOne or more ADCs are broken (");
@@ -719,36 +723,44 @@ int FzTest::OffCal() {
 
 //Offset vs applyed DC level plot routine
 int FzTest::OffCurve() {
-	FILE *fout;
-	int dac,mes,c,ret;
+	int dac,mes,c,ret,old[6];
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
-	fout=fopen("output.txt","w");
-	if(fout==NULL) return 0;
+	//Store present DAC value
+	for(c=0;c<6;c++) {
+		sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+4);
+		if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
+		ret=sscanf((char *)reply,"0|%d",old+c);
+		if(ret!=1) return -20;
+	}
 	
 	if(!fVerb) {
-		printf(BLD " DAC   QH1-A   Q2-A   Q3-A  QH1-B   Q2-B   Q3-B\n" NRM);
+		printf(BLD "\n DAC   QH1-A   Q2-A   Q3-A  QH1-B   Q2-B   Q3-B\n" NRM);
 		printf("------------------------------------------------\n");
 	}
 	for(dac=0;dac<1024;dac+=10) {
 		for(c=0;c<6;c++) {
 			sprintf(query,"%s,%d,%d",lFPGA[c/3],c%3+1,dac);
-			if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) goto err;
+			if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
 		}
-		fprintf(fout,"%4d",dac);
 		if(!fVerb) printf(BLD "%4d" NRM,dac);
 		for(c=0;c<6;c++) {
-			if((ret=BLmeas(c2ch[c],3,&mes,nullptr))<0) goto err;
-			fprintf(fout," % 6d",mes);
+			if((ret=BLmeas(c2ch[c],3,&mes,nullptr))<0) return ret;
 			if(!fVerb) printf(" % 6d",mes);
+			offmatrix[c][dac/10]=mes;
 		}
-		fprintf(fout,"\n");
 		if(!fVerb) printf("\n");
 	}
-	err:
-	fclose(fout);
-	return ret;
+	tCurve=true;
+	
+	//Set DAC to previous value
+	for(c=0;c<6;c++) {
+		//Set DAC to previous value
+		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,old[c]);
+		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
+	}
+	return 0;
 }
 
 //Offset manual test
@@ -793,13 +805,25 @@ int FzTest::OffManual() {
 		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,dac);
 		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
 		usleep(1000);
-		if((ret=BLmeas(ch,10,&base,nullptr))<0) return ret;
+		if((ret=BLmeas(ch,1,&base,nullptr))<0) return ret;
 		if(ch==0 || ch==6) {
-			if((ret=BLmeas(ch+2,10,&basel,nullptr))<0) return ret;
+			if((ret=BLmeas(ch+2,1,&basel,nullptr))<0) return ret;
 		}
 		if(!fVerb) printf(UP);
-		printf("DAC = " BLD "%4d" NRM " => BL(H) = %5d",dac,base);
-		if(ch==0 || ch==6) printf(", BL(L) = %5d     \n",basel);
+		printf("DAC = " BLD "%4d" NRM " => BL(H) = %5d (",dac,base);
+		for(int i=13;i>=0;i--) {
+			printf("%d",(base>>i)&1);
+			if(i%2==0 && i!=0) printf(" ");
+		}
+		printf(")");
+		if(ch==0 || ch==6) {
+			printf(", BL(L) = %5d (",basel);
+			for(int i=13;i>=0;i--) {
+				printf("%d",(basel>>i)&1);
+				if(i%2==0 && i!=0) printf(" ");
+			}
+			printf(")\n");
+		}
 		else printf("                    \n");
 	}
 	
@@ -1179,7 +1203,7 @@ void FzTest::UpdateDB() {
 	
 	loganalog:
 	//ANALOG CHAIN INFORMATION
-	if(tAnalog == false) goto logHV;
+	if(tAnalog == false) goto logcurve;
 	sprintf(filename,"%s/analog.txt",dirname);
 	f=fopen(filename,"r");
 	if(f!=NULL) {
@@ -1230,6 +1254,27 @@ void FzTest::UpdateDB() {
 		else fprintf(flog,"[%s]   analog.txt %s DB entry was updated (DAC)\n",stime,lcmp);
 		fprintf(f," %5d %5d\n",dacoff[c],dcreact[c]);
 	}
+	fclose(f);
+	
+	logcurve:
+	//OFFSET CURVE (IF TESTED, OVERWRITE PREVIOUS CURVE)
+	if(tCurve == false) goto logHV;
+	sprintf(filename,"%s/offcurve.txt",dirname);
+	if((f=fopen(filename,"w"))==NULL) {
+		perror(RED "UpdateDB" NRM);
+		fclose(flog);
+		return;
+	}
+	
+	fprintf(f,"#DAC  QH1-A   Q2-A   Q3-A  QH1-B   Q2-B   Q3-B\n");
+	for(N=0;N<103;N++) {
+		fprintf(f,"%4d",N*10);
+		for(c=0;c<6;c++) {
+			fprintf(f," % 6d",offmatrix[c][N]);
+		}
+		fprintf(f,"\n");
+	}
+	fprintf(flog,"[%s] offcurve.txt DB file was updated\n",stime);
 	fclose(f);
 	
 	logHV:

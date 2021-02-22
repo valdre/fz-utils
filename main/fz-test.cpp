@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 11/02/2021                          *
+*                         Simone Valdre' - 22/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -8,12 +8,13 @@
 #include "FzTest.h"
 
 int main(int argc, char *argv[]) {
-	int c,ret,tmp,blk=0,fee=0,dump=0;
-	bool verb=false,serial=true,keith=false,autom=true,power=false;
-	char device[SLENG]="/dev/ttyUSB0",kdevice[SLENG]="/dev/ttyUSB1",hname[SLENG]="regboard0",romfile[MLENG]="";
+	int c,ret,tmp,blk=0,fee=0,dump=0,lock=0;
+	bool verb=false,serial=true,autom=true;
+	char *target,device[SLENG],kdevice[SLENG],hname[SLENG]="regboard0",romfile[MLENG]="";
 	
+	device[0]='\0'; kdevice[0]='\0';
 	//Decode options
-	while((c=getopt(argc,argv,"hvmpud:n:k:b:f:r:w:"))!=-1) {
+	while((c=getopt(argc,argv,"hvmud:n:k:b:f:r:w:"))!=-1) {
 		switch(c) {
 			case 'v':
 				verb=true;
@@ -24,9 +25,6 @@ int main(int argc, char *argv[]) {
 			case 'm':
 				autom=false;
 				break;
-			case 'p':
-				power=true;
-				break;
 			case 'd':
 				if(optarg!=NULL && strlen(optarg)<SLENG) strcpy(device,optarg);
 				break;
@@ -35,7 +33,6 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'k':
 				if(optarg!=NULL && strlen(optarg)<SLENG) strcpy(kdevice,optarg);
-				keith=true;
 				break;
 			case 'b':
 				if(optarg!=NULL) tmp=atoi(optarg);
@@ -59,12 +56,11 @@ int main(int argc, char *argv[]) {
 				printf("    -h         this help\n");
 				printf("    -v         enable verbose output\n");
 				printf("    -m         manual operation (skip automatic checks)\n");
-				printf("    -p         power on FEEs (necessary when using block configuration)\n");
 				printf("    -u         use UDP protocol (via RB) [by default direct RS232 is used]\n");
-				printf("    -d <dev>   specify the FEE serial device (used only without UDP) [default: /dev/ttyUSB0]\n");
+				printf("    -d <dev>   specify the FEE serial device (used only without UDP) [default: auto]\n");
 				printf("    -n <dev>   specify the RB hostname (used only with UDP) [default: regboard0]\n");
-				printf("    -k <dev>   specify the Keithley 2000 device [default: disabled]\n");
-				printf("    -b <blk>   specify the block ID [0-3584, default: 0]\n");
+				printf("    -k <dev>   specify the Keithley 2000 device [default: auto]\n");
+				printf("    -b <blk>   specify the block ID [0-3583, default: 0]\n");
 				printf("    -f <fee>   specify the FEE ID   [0-   7, default: 0]\n");
 				printf("    -r <file>  read all the EEPROM data and dump it to a file\n");
 				printf("    -w <file>  write a file content to the EEPROM (line structure: \"<address (DEC)> <content (HEX)>\")\n");
@@ -74,13 +70,31 @@ int main(int argc, char *argv[]) {
 	}
 	
 	//Open FEE or RB
-	FzSC sock(serial,serial?device:hname);
+	if(serial && strlen(device)<1) target=nullptr;
+	else target=device;
+	FzSC sock(lock,serial,serial?target:hname,false,blk,fee);
 	if(!(sock.SockOK())) return 0;
+	if(sock.IsBC()) {
+		//BC connection: FEE needs to be powered up
+		uint8_t reply[MLENG];
+		if((ret=sock.Send(blk,8,0x83,"",reply,verb))) {
+			printf(RED "fz-test " NRM " FEE power on failed (Send)\n");
+			return 0;
+		}
+		if(strcmp((char *)reply,"0|")) {
+			printf(RED "fz-test " NRM " FEE power on failed (bad reply)\n");
+			return 0;
+		}
+		printf(BLD "fz-test " NRM " Waiting 10s for power on...\n");
+		sleep(10);
+		printf(UP GRN "fz-test " NRM " FEEs powered on...          \n");
+	}
 	
-	//Open Keithley
+	//Open Keithley (except when dumping EEPROM)
 	FzSC *ksock=nullptr;
-	if(keith&&(!dump)) {
-		ksock=new FzSC(true,kdevice,true);
+	if(!dump) {
+		if(strlen(kdevice)<1) ksock=new FzSC(lock,true,nullptr,true);
+		else ksock=new FzSC(lock,true,kdevice,true);
 		if(ksock->SockOK()==false) {
 			delete ksock;
 			ksock=nullptr;
@@ -89,18 +103,6 @@ int main(int argc, char *argv[]) {
 	
 	FzTest test(&sock,blk,fee,verb);
 	if(ksock!=nullptr) test.KeithleySetup(ksock);
-	
-	if(power) {
-		uint8_t reply[MLENG];
-		if((ret=sock.Send(blk,8,0x83,"",reply,verb))) goto err;
-		if(strcmp((char *)reply,"0|")) {
-			printf(RED "fz-test " NRM " FEE power on failed\n");
-			ret=-20; goto err;
-		}
-		printf(BLD "fz-test " NRM " Waiting 10s for power on...\n");
-		sleep(10);
-		printf(UP GRN "fz-test " NRM " FEEs powered on...          \n");
-	}
 	
 	if(dump) {
 		if(strlen(romfile)<=0) {
@@ -135,7 +137,7 @@ int main(int argc, char *argv[]) {
 	ending:
 	test.UpdateDB();
 	
-	if(power) {
+	if(sock.IsBC()) {
 		uint8_t reply[MLENG];
 		if((ret=sock.Send(blk,8,0x84,"",reply,verb))) {
 			printf(RED "fz-test " NRM " FEE power off failed (send error)\n");

@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 11/02/2021                          *
+*                         Simone Valdre' - 22/02/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -11,8 +11,6 @@
 #include "FzSC.h"
 #include <time.h>
 
-//String maximum length
-#define SLENG 100
 //Last versions of PIC and FPGA firmwares
 #define LASTVPICV3 "28/01/2016"
 #define LASTVPICV4 "13/03/2018"
@@ -119,12 +117,12 @@ private:
 	
 	//common variables
 	bool fVerb, fInit;
-	bool tGeneral, tAnalog, tHV[4], tCalib;
+	bool tGeneral, tAnalog, tCurve, tHV[4], tCalib;
 	FzSC *sock,*ksock;
 	int blk,fee;
 	
 	//FEE data
-	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],blvar[12],dacoff[6],dcreact[6],hvmask,V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
+	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],blvar[12],dacoff[6],dcreact[6],offmatrix[6][103],hvmask,V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
 	double Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 	int failmask,tcal[4];

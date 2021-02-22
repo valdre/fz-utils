@@ -568,7 +568,7 @@ int FzTest::Manual() {
 		printf("    5) HV calibration\n");
 		printf("    6) HV guided test\n");
 		printf("    7) HV manual test\n");
-		printf("    8) Send manual SC command (not implemented yet)\n");
+		printf("    8) Send manual SC command\n");
 		printf("    9) General fast test\n");
 		printf("    0) Quit\n");
 		printf("> "); scanf("%d",&tmp); getchar();
@@ -596,6 +596,9 @@ int FzTest::Manual() {
 				break;
 			case 7:
 				if((ret=HVManual())<0) return ret;
+				break;
+			case 8:
+				if((ret=SCManual())<0) return ret;
 				break;
 			case 9:
 				if((ret=FastTest(true))<0) return ret;
@@ -973,6 +976,49 @@ int FzTest::HVManual() {
 	//forcing return to 0V to all channels
 	for(c=0;c<4;c++) SetDAC(c,0);
 	return ret;
+}
+
+int FzTest::SCManual() {
+	int i,Blk,Fee,Com,ret;
+	char query[SLENG];
+	uint8_t reply[MLENG];
+	
+	printf(BLD "\nBLK ID" NRM "\n 0:3583 -> blocks\n     -1 -> Regional Board\n others -> quit\n[default=%d]> ",blk);
+	for(i=0;(ret=getchar())!='\n';i++) query[i]=ret;
+	query[i]='\0';
+	if(i==0) Blk=blk;
+	else Blk=atoi(query);
+	if(Blk<-1 || Blk>3583) goto err;
+	if(Blk<0) {
+		Blk=3584;
+		Fee=0;
+	}
+	else {
+		printf(BLD "\nFEE ID" NRM "\n 0:7 -> FEEs\n  8 -> Power Supply\n  9 -> Block Card\n others -> quit\n[default=%d]> ",fee);
+		for(i=0;(ret=getchar())!='\n';i++) query[i]=ret;
+		query[i]='\0';
+		if(i==0) Fee=fee;
+		else Fee=atoi(query);
+		if(Fee<0 || Fee>9) goto err;
+	}
+	printf(BLD "\nCOMMAND" NRM " (HEX)\n> ");
+	for(i=0;(ret=getchar())!='\n';i++) query[i]=ret;
+	query[i]='\0';
+	if(i==0) goto err;
+	if((ret=sscanf(query,"%X",&Com))!=1) goto err;
+	if(Com<0 || Com>0xFF) goto err;
+	
+	printf(BLD "\nARGUMENT" NRM " (ASCII)\n[default=<empty>]> ");
+	for(i=0;(ret=getchar())!='\n';i++) query[i]=ret;
+	query[i]='\0';
+	
+	printf("\nTransaction output:\n");
+	sock->Send(Blk,Fee,Com,query,reply,1);
+	return 0;
+	
+	err:
+	printf(RED "SCManual" NRM "Invalid choice\n");
+	return 0;
 }
 
 //Update the card DB on disk

@@ -115,6 +115,7 @@ private:
 	int HVTest();
 	int HVCalib();
 	int HVManual();
+	int SCManual();
 	
 	//common variables
 	bool fVerb, fInit;

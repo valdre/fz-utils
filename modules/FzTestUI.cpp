@@ -102,7 +102,7 @@ int FzTest::FastTest(bool man) {
 	for(c=0;c<6;c++) {
 		if(adcmask&(1<<c)) continue; //Skip line if ADC is broken
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
-		if((dacoff[c]<600) || (dacoff[c]>800) || (dcreact[c]<1000)) {
+		if((dacoff[c]<dcref-5*dcsigma) || (dacoff[c]>dcref+5*dcsigma) || (dcreact[c]<reacref-5*reacsigma) || (dcreact[c]>reacref+5*reacsigma)) {
 			if(dcreact[c]<1000) {
 				printf(RED "Fail" NRM);
 				failmask|=FAIL_OFFSET;
@@ -113,12 +113,12 @@ int FzTest::FastTest(bool man) {
 			}
 		}
 		else printf(GRN "Pass" NRM);
-		printf(" % 20d % 10d",dacoff[c],680);
-		if(dcreact[c]<1000) {
-			printf(" Non responsive");
-			if((dacoff[c]<600) || (dacoff[c]>800)) printf(" -");
+		printf(" % 20d % 10d",dacoff[c],dcref);
+		if((dcreact[c]<reacref-5*reacsigma) || (dcreact[c]>reacref+5*reacsigma)) {
+			printf(" Bad reaction");
+			if((dacoff[c]<dcref-5*dcsigma) || (dacoff[c]>dcref+5*dcsigma)) printf(" -");
 		}
-		if((dacoff[c]<600) || (dacoff[c]>800)) printf(" Bad level");
+		if((dacoff[c]<dcref-5*dcsigma) || (dacoff[c]>dcref+5*dcsigma)) printf(" Bad level");
 		printf("\n");
 	}
 	
@@ -126,7 +126,7 @@ int FzTest::FastTest(bool man) {
 	printf(BLD "\nBaseline offsets (in ADC units):\n" NRM);
 	for(c=0;c<12;c++) {
 		if(adcmask&(1<<ch2c[c]) && is_charge[c%6]) continue; //Skip line if ADC is broken
-		if(((dacoff[ch2c[c]]<600) || (dacoff[ch2c[c]]>800) || (dcreact[ch2c[c]]<1000)) && is_charge[c%6]) continue; //Skip line if a failure on DC level was already shown
+		if(((dacoff[ch2c[c]]<dcref-5*dcsigma) || (dacoff[ch2c[c]]>dcref+5*dcsigma) || (dcreact[c]<reacref-5*reacsigma) || (dcreact[c]>reacref+5*reacsigma)) && is_charge[c%6]) continue; //Skip line if a failure on DC level was already shown
 		
 		printf("               %s-%s ",lADC[c%6],lFPGA[c/6]);ref=(v4)?blref5[c%6]:blref3[c%6];
 		if((fabs(ref-(double)(bl[c]))>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])) {

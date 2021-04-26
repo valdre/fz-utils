@@ -92,6 +92,7 @@ private:
 	int IVADC(const int c, double *V, int *Vvar, double *I, bool wait=true);
 	int LinReg(const int n, const double *x, const double *y, double *p1, double *p0);
 	int SetDAC(const int c, const int vset, int vprev=-1);
+	int GetDAC(const int c);
 	int ReadCell(const int add);
 	int WriteCell(const int add, const int cont);
 	

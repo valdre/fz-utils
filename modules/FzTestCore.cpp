@@ -1013,6 +1013,35 @@ int FzTest::SetDAC(const int c, const int vset, int vprev) {
 	return 0;
 }
 
+//Get the present HV DAC value
+int FzTest::GetDAC(const int c) {
+	int ret,vdac;
+	char query[SLENG];
+	uint8_t reply[MLENG];
+	
+	//Previous value is unknown
+	sprintf(query,"%s,%d,+,1",lFPGA[c/2],(c%2)+1);
+	if((ret=sock->Send(blk,fee,0x8D,query,reply,fVerb))) {
+		if(ret!=-5) return ret;
+		else {
+			//DAC was at maximum value, +1 was not allowed
+			sprintf(query,"%s,%d,-,1",lFPGA[c/2],(c%2)+1);
+			if((ret=sock->Send(blk,fee,0x8D,query,reply,fVerb))) return ret;
+			sprintf(query,"%s,%d,+,1",lFPGA[c/2],(c%2)+1);
+			if((ret=sock->Send(blk,fee,0x8D,query,reply,fVerb))) return ret;
+			ret=sscanf((char *)reply,"0|%d",&vdac);
+			if(ret!=1) return -20;
+		}
+	}
+	else {
+		sprintf(query,"%s,%d,-,1",lFPGA[c/2],(c%2)+1);
+		if((ret=sock->Send(blk,fee,0x8D,query,reply,fVerb))) return ret;
+		ret=sscanf((char *)reply,"0|%d",&vdac);
+		if(ret!=1) return -20;
+	}
+	return vdac;
+}
+
 //EEPROM read/write functions
 //Dump all the EEPROM content to a file
 int FzTest::FullRead(const char *filename) {

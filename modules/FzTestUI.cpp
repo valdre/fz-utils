@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/02/2021                          *
+*                         Simone Valdre' - 16/03/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -902,9 +902,10 @@ int FzTest::HVCalib() {
 }
 
 int FzTest::HVManual() {
-	int ret,chr,c,cal,max,dac,V,I;
+	int ret,c,max,dac[4],vinp,dinp,V,I;
 	double Vd,Id;
-	char query[SLENG];
+	bool fast=false,cal;
+	char input[SLENG],query[SLENG];
 	uint8_t reply[MLENG];
 	
 	if(!tGeneral) {
@@ -912,90 +913,116 @@ int FzTest::HVManual() {
 		if((ret=TestGeneral())<0) return ret;
 	}
 	
-	printf("\nWhich channel do you want to test?\n");
-	printf("    0) Si1-A\n");
-	printf("    1) Si2-A\n");
-	printf("    2) Si1-B\n");
-	printf("    3) Si2-B\n");
-	printf("[default=quit]> ");
-	c=getchar();
-	if(c!='\n') {
+	printf("\nFast mode? (current readings will be not reliable)> " NRM "[Y/n]> ");
+	ret=getchar();
+	if(ret!='\n') {
 		for(;getchar()!='\n';);
 	}
-	if(c<0x30 || c>0x33) return 0;
-	c-=0x30;
+	if(ret=='\n' || ret=='y' || ret=='Y') fast=true;
 	
-	//Set max voltage
-	max=v4?maxhv4[c%2]:maxhv3[c%2];
-	sprintf(query,"%s,%d,%d",lFPGA[c/2],c%2+1,max);
-	if((ret=sock->Send(blk,fee,0x92,query,reply,fVerb))) return ret;
-	
-	//Enable HV (v4/5 only)
-	if(v4) {
-		sprintf(query,"%s,1",lFPGA[c/2]);
-		if((ret=sock->Send(blk,fee,0xA6,query,reply,fVerb))) return ret;
-	}
-	
-	if(hvmask&(1<<c)) {
-		printf("\nDo you want to set DAC output or calibrated voltage?\n");
-		printf("    0) DAC\n");
-		printf("    1) V\n");
-		printf("[default=1]> ");
-		cal=getchar();
-		if(cal!='\n') {
-			for(;getchar()!='\n';);
+	for(c=0;c<4;c++) {
+		//Set max voltage
+		max=v4?maxhv4[c%2]:maxhv3[c%2];
+		sprintf(query,"%s,%d,%d",lFPGA[c/2],c%2+1,max);
+		if((ret=sock->Send(blk,fee,0x92,query,reply,fVerb))) goto err;
+		
+		//Enable HV (v4/5 only)
+		if(v4) {
+			sprintf(query,"%s,1",lFPGA[c/2]);
+			if((ret=sock->Send(blk,fee,0xA6,query,reply,fVerb))) return ret;
 		}
-		if(cal<0x30 || cal>0x31) cal=1;
-		else cal-=0x30;
-	}
-	else {
-		printf(YEL "HVManual" NRM " HV is not calibrated, setting DAC values only\n");
-		cal=0;
+		
+		//Cheching present DAC value
+		if((dac[c]=GetDAC(c))<0) return dac[c];
 	}
 	
+	printf("\nManual test syntax: <channel>,<value>\n");
+	printf("Positive value means DAC units, negative is expressed in Volts\n");
+	printf("If the channel is not calibrated, an approximated conversion V => DAC will be performed.\n");
+	printf("Current readings are not reliable if DAC is directly set\ninstead of typing V in calibrated channels.\n");
+	printf("Empty or invalid queries will quit this funcion.\n\n");
+	
+	//Test loop
 	for(;;) {
-		if(cal) {
-			printf("V [<0 to stop]> "); scanf("%d",&dac); getchar();
-			if(dac<0) break;
-			if(dac>max) {
-				printf(UP RED "Bad value!" NRM "Maximum allowed: %d V\n",max);
-				continue;
+		printf("List and status of available HV channels:\n");
+		for(c=0;c<4;c++) printf("    %d) %s-%s [%s] DAC = %5d\n",c,lChan[c%2],lFPGA[c/2],(hvmask&(1<<c))?"calib":"uncal",dac[c]);
+		printf("> ");
+		ret=0;
+		c=getchar();
+		if(c!='\n') {
+			input[0]=(char)c;
+			for(ret=1;((c=getchar())!='\n')&&(ret<SLENG-1);ret++) input[ret]=(char)c;
+		}
+		input[ret]='\0';
+		if(ret==0) break;
+		ret=sscanf(input,"%d,%d",&c,&vinp);
+		if(ret!=2) break;
+		if((c<0)||(c>3)) {
+			printf(UP YEL "Invalid channel!                             \n" NRM);
+			continue;
+		}
+		
+		//Set max variable and check limits
+		max=v4?maxhv4[c%2]:maxhv3[c%2];
+		if((vinp<-max) || (vinp>65535)) {
+			printf(UP YEL "Invalid value!\n" NRM);
+			continue;
+		}
+		
+		if(hvmask&(1<<c)) {
+			cal=true;
+			if(vinp<0) {
+				dinp=-1;
+				vinp=-vinp;
 			}
-			if((ret=ApplyHV(c,dac))<0) goto err;
+			else {
+				dinp=vinp;
+				vinp=-1;
+			}
+		}
+		else {
+			cal=false;
+			if(vinp<0) {
+				dinp=-V2D[c%2]*vinp;
+				vinp=-1;
+			}
+			else {
+				dinp=vinp;
+				vinp=-1;
+			}
+		}
+		if(vinp>=0) {
+			printf(UP BLD "Setting   V =   %3d V on channel %d      \n" NRM,vinp,c);
+			if((ret=ApplyHV(c,vinp))<0) goto err;
+			//Cheching present DAC value
+			if((dac[c]=GetDAC(c))<0) return dac[c];
 			//measuring calibrated and uncalibrated readings
-			if((ret=IVmeas(c,&V,nullptr,&I,true))<0) goto err;
+			if((ret=IVmeas(c,&V,nullptr,&I,!fast))<0) goto err;
 			if((ret=IVADC(c,&Vd,nullptr,&Id,false))<0) goto err;
 		}
 		else {
-			printf("DAC value [<0 to stop]> "); scanf("%d",&dac); getchar();
-			if(dac<0) break;
-			if(dac>65535) {
-				printf(UP RED "Bad value!" NRM "Maximum allowed: 65535\n");
-				continue;
-			}
-			if(dac>30000) {
+			if(dinp>V2D[c%2]*max) {
 				printf(UP YEL "Very high DAC value!!! Are you sure? " NRM "[y/N]> ");
-				chr=getchar();
-				if(chr!='\n') {
+				ret=getchar();
+				if(ret!='\n') {
 					for(;getchar()!='\n';);
 				}
-				if(chr=='\n' || chr=='n' || chr=='N') continue;
+				if(ret=='\n' || ret=='n' || ret=='N') continue;
 			}
-			
-			if((ret=SetDAC(c,dac))<0) goto err;
+			printf(UP BLD "Setting DAC = %5d   on channel %d      \n" NRM,dinp,c);
+			if((ret=SetDAC(c,dinp))<0) goto err;
+			dac[c]=dinp;
 			//measuring (calibrated and) uncalibrated readings
-			if(hvmask&(1<<c)) {
-				if((ret=IVmeas(c,&V,nullptr,&I,true))<0) goto err;
+			if(cal) {
+				if((ret=IVmeas(c,&V,nullptr,&I,!fast))<0) goto err;
 				if((ret=IVADC(c,&Vd,nullptr,&Id,false))<0) goto err;
 			}
 			else {
-				if((ret=IVADC(c,&Vd,nullptr,&Id,true))<0) goto err;
+				if((ret=IVADC(c,&Vd,nullptr,&Id,!fast))<0) goto err;
 			}
 		}
 	}
-	SetDAC(c,0);
-	return 0;
-	
+	ret=0;
 	err:
 	//forcing return to 0V to all channels
 	for(c=0;c<4;c++) SetDAC(c,0);

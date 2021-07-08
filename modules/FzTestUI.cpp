@@ -9,7 +9,7 @@
 
 //Fast test routine
 int FzTest::FastTest(bool man) {
-	int c,N,ret;
+	int c, N, Nfail, ret;
 	float ref;
 	
 	Init();
@@ -102,23 +102,24 @@ int FzTest::FastTest(bool man) {
 	for(c=0;c<6;c++) {
 		if(adcmask&(1<<c)) continue; //Skip line if ADC is broken
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
-		if((dacoff[c]<dcref-5*dcsigma) || (dacoff[c]>dcref+5*dcsigma) || (dcreact[c]<reacref-5*reacsigma) || (dcreact[c]>reacref+5*reacsigma)) {
-			if(dcreact[c]<1000) {
-				printf(RED "Fail" NRM);
-				failmask|=FAIL_OFFSET;
-			}
-			else {
-				printf(YEL "Warn" NRM);
-				failmask|=FAIL_DC;
-			}
+		Nfail=0;
+		if(abs(dacoff[c]-dcref) > 5*dcsigma) {
+			failmask |= FAIL_DC;
+			Nfail++;
 		}
-		else printf(GRN "Pass" NRM);
+		if(abs(dcreact[c]-reacref) > 5*reacsigma) {
+			failmask |= FAIL_OFFSET;
+			Nfail++;
+		}
+		if(Nfail == 0) printf(GRN "Pass" NRM);
+		else printf(RED "Fail" NRM);
+		
 		printf(" % 20d % 10d",dacoff[c],dcref);
-		if((dcreact[c]<reacref-5*reacsigma) || (dcreact[c]>reacref+5*reacsigma)) {
+		if(abs(dcreact[c]-reacref) > 5*reacsigma) {
 			printf(" Bad reaction");
-			if((dacoff[c]<dcref-5*dcsigma) || (dacoff[c]>dcref+5*dcsigma)) printf(" -");
+			if(--Nfail) printf(" -");
 		}
-		if((dacoff[c]<dcref-5*dcsigma) || (dacoff[c]>dcref+5*dcsigma)) printf(" Bad level");
+		if(abs(dacoff[c]-dcref) > 5*dcsigma) printf(" Bad level");
 		printf("\n");
 	}
 	
@@ -126,20 +127,37 @@ int FzTest::FastTest(bool man) {
 	printf(BLD "\nBaseline offsets (in ADC units):\n" NRM);
 	for(c=0;c<12;c++) {
 		if(adcmask&(1<<ch2c[c]) && is_charge[c%6]) continue; //Skip line if ADC is broken
-		if(((dacoff[ch2c[c]]<dcref-5*dcsigma) || (dacoff[ch2c[c]]>dcref+5*dcsigma) || (dcreact[c]<reacref-5*reacsigma) || (dcreact[c]>reacref+5*reacsigma)) && is_charge[c%6]) continue; //Skip line if a failure on DC level was already shown
+		if((failmask&FAIL_OFFSET) && is_charge[c%6]) continue; //Skip line if a failure on DC level was already shown
 		
 		printf("               %s-%s ",lADC[c%6],lFPGA[c/6]);ref=(v4)?blref5[c%6]:blref3[c%6];
-		if((fabs(ref-(double)(bl[c]))>=bltoll[c%6])||(blvar[c]>=blvtol[c%6])) {
-			failmask|=FAIL_OFFSET;
-			printf(RED "Fail" NRM);
+		Nfail=0;
+		if(fabs(ref-(double)(bl[c])) >= bltoll[c%6]) {
+			failmask |= FAIL_OFFSET;
+			Nfail++;
 		}
-		else printf(GRN "Pass" NRM);
+		if(blvar[c] >= blvtol[c%6]) {
+			failmask |= FAIL_OFFSET;
+			Nfail++;
+		}
+		if((c%6 == 5) && (blvar[c] < 3)) {
+			failmask |= FAIL_PREAMP;
+			Nfail++;
+		}
+		if(Nfail == 0) printf(GRN "Pass" NRM);
+		else printf(RED "Fail" NRM);
+		
 		printf(" % 20d % 10.0f",bl[c],ref);
 		if(blvar[c]>=blvtol[c%6]) {
 			printf(" Unstable");
-			if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) printf(" -");
+			if(--Nfail) printf(" -");
 		}
-		if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) printf(" Bad level");
+		if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) {
+			printf(" Bad level");
+			if(--Nfail) printf(" -");
+		}
+		if((c%6 == 5) && (blvar[c] < 3)) {
+			printf(" Bad pre-amp feedback");
+		}
 		printf("\n");
 	}
 	
@@ -390,7 +408,7 @@ int FzTest::HVTest() {
 	if((ret=ManyIVmeas(testmask,V20,V20var,nullptr,false))<0) goto err;
 	for(c=0;c<4;c++) {
 		if((testmask&(1<<c))==0) continue;
-		if(abs(V20[c]-20)>2 || V20var[c]>5) {
+		if(abs(V20[c]-20)>2 || V20var[c]>2) {
 			if((ret=ApplyHV(c,0))<0) goto err;
 			testmask&=(~(1<<c));
 		}
@@ -407,7 +425,7 @@ int FzTest::HVTest() {
 	//Exclude again unstable channels
 	for(c=0;c<4;c++) {
 		if((testmask&(1<<c))==0) continue;
-		if(abs(Vfull[c]-max[c])>20 || Vfullvar[c]>5) {
+		if(abs(Vfull[c]-max[c])>20 || Vfullvar[c]>2) {
 			testmask&=(~(1<<c));
 		}
 	}
@@ -459,15 +477,15 @@ int FzTest::HVTest() {
 		if(tHV[c]==false) continue;
 		
 		printf(" %3s-%1s        (20 V) ",lChan[c%2],lFPGA[c/2]);
-		if(abs(V20[c]-20)>1 || V20var[c]>5) printf(RED "Fail" NRM);
+		if(abs(V20[c]-20)>1 || V20var[c]>2) printf(RED "Fail" NRM);
 		else printf(GRN "Pass" NRM);
 		printf(" % 20d         20",V20[c]);
 		if(abs(V20[c]-20)>1) {
 			printf(" V mismatch");
 			failmask|=FAIL_HVADC;
-			if(V20var[c]>5) printf(" -");
+			if(V20var[c]>2) printf(" -");
 		}
-		if(V20var[c]>5) {
+		if(V20var[c]>2) {
 			printf(" Unstable HV");
 			failmask|=FAIL_HVHARD;
 		}
@@ -476,15 +494,15 @@ int FzTest::HVTest() {
 		int max=v4?maxhv4[c%2]:maxhv3[c%2];
 		if(Vfull[c]<0 || Vfullvar[c]<0) continue;
 		printf(" %3s-%1s        (Vmax) ",lChan[c%2],lFPGA[c/2]);
-		if(abs(Vfull[c]-max)>5 || Vfullvar[c]>5) printf(RED "Fail" NRM);
+		if(abs(Vfull[c]-max)>5 || Vfullvar[c]>2) printf(RED "Fail" NRM);
 		else printf(GRN "Pass" NRM);
 		printf(" % 20d        %3d",Vfull[c],max);
 		if(abs(Vfull[c]-max)>5) {
 			printf(" V mismatch");
 			failmask|=FAIL_HVADC;
-			if(Vfullvar[c]>5) printf(" -");
+			if(Vfullvar[c]>2) printf(" -");
 		}
-		if(Vfullvar[c]>5) {
+		if(Vfullvar[c]>2) {
 			printf(" Unstable HV");
 			failmask|=FAIL_HVHARD;
 		}
@@ -662,7 +680,7 @@ int FzTest::OffCal() {
 			printf(YEL "OffCal  " NRM " %s-%s: saturating baseline\n",lADC[ch%6],lFPGA[ch/6]);
 			continue;
 		}
-		if(blvar[ch]>5*blvtol[ch%6]) {
+		if(blvar[ch] > 5*blvtol[ch%6]) {
 			printf(YEL "OffCal  " NRM " %s-%s: unstable DC level\n",lADC[ch%6],lFPGA[ch/6]);
 			continue;
 		}
@@ -1241,10 +1259,10 @@ void FzTest::UpdateDB() {
 			if(ret!=2) continue;
 			
 			for(ch=0;ch<12;ch++) {
-				c=ch2c[ch];
-				sprintf(lcmp,"%s-%s offset",lADCs[ch%6],lFPGA[ch/6]);
-				if(strcmp(lcmp,label)==0) {
-					N=sscanf(data," %d %d %d %d",ref.bl+ch,ref.blvar+ch,&tmp1,&tmp2);
+				c = ch2c[ch];
+				sprintf(lcmp, "%s-%s offset", lADCs[ch%6], lFPGA[ch/6]);
+				if(strcmp(lcmp, label) == 0) {
+					N = sscanf(data, " %d %lf %d %d", ref.bl+ch, ref.blvar+ch, &tmp1, &tmp2);
 					if((N==4)&&(ch==0 || ch==3 || ch==5 || ch==6 || ch==9 || ch==11)) {
 						ref.dacoff[c]=tmp1; ref.dcreact[c]=tmp2;
 					}
@@ -1263,15 +1281,16 @@ void FzTest::UpdateDB() {
 		return;
 	}
 	
+	fprintf(f,"# !!! NEW DB format !!!\n");
 	fprintf(f,"# First value -> measured base line level in ADC units\n");
-	fprintf(f,"#Second value -> maximum variation of base line level\n");
+	fprintf(f,"#Second value -> st. dev. of base line level\n");
 	fprintf(f,"# Third value -> currently set DAC value (QH1, Q2 and Q3 only)\n");
 	fprintf(f,"#Fourth value -> base line shift with a 200 unit variation of the DAC output (QH1, Q2 and Q3 only)\n\n");
 	for(ch=0;ch<12;ch++) {
 		sprintf(lcmp,"        %s-%s offset",lADC[ch%6],lFPGA[ch/6]);
-		if(ref.bl[ch]>-9000 && bl[ch]<-9000) {bl[ch]=ref.bl[ch]; blvar[ch]=ref.blvar[ch];}
+		if(ref.bl[ch]>-9000 && bl[ch]<-9000) {bl[ch] = ref.bl[ch]; blvar[ch] = ref.blvar[ch];}
 		else fprintf(flog,"[%s]   analog.txt %s DB entry was updated (offsets)\n",stime,lcmp);
-		fprintf(f,"%s: %5d %5d",lcmp,bl[ch],blvar[ch]);
+		fprintf(f, "%s: %5d %5.1f", lcmp, bl[ch], blvar[ch]);
 		if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) {
 			fprintf(f,"\n");
 			continue;
@@ -1319,7 +1338,7 @@ void FzTest::UpdateDB() {
 			for(c=0;c<4;c++) {
 				sprintf(lcmp,"%s-%s HV test",lChan[c%2],lFPGA[c/2]);
 				if(strcmp(lcmp,label)==0) {
-					N=sscanf(data," %d %d %d %d %d %d",ref.V20+c,ref.V20var+c,ref.Vfull+c,ref.Vfullvar+c,ref.Ifull+c,ref.I1000+c);
+					N = sscanf(data, " %d %lf %d %lf %d %d", ref.V20+c, ref.V20var+c, ref.Vfull+c, ref.Vfullvar+c, ref.Ifull+c, ref.I1000+c);
 					if(N!=6) {
 						ref.V20[c]=-1; ref.V20var[c]=-1; ref.Vfull[c]=-1; ref.Vfullvar[c]=-1; ref.Ifull[c]=-1; ref.I1000[c]=-1;
 					}
@@ -1335,21 +1354,22 @@ void FzTest::UpdateDB() {
 		return;
 	}
 	
+	fprintf(f,"# !!! NEW DB format !!!\n");
 	fprintf(f,"# First value -> measured HV at 20V calibrated in V\n");
-	fprintf(f,"#Second value -> maximum variation of HV level at 20V\n");
+	fprintf(f,"#Second value -> st. dev. of HV level at 20V\n");
 	fprintf(f,"# Third value -> measured maximum HV calibrated in V\n");
-	fprintf(f,"#Fourth value -> maximum variation of maximum HV level\n");
+	fprintf(f,"#Fourth value -> st. dev. of maximum HV level\n");
 	fprintf(f,"# Fifth value -> measured current at maximum voltage without load (nA)\n");
 	fprintf(f,"# Sixth value -> measured current with load (1000 nA expected)\n\n");
 	for(c=0;c<4;c++) {
 		sprintf(lcmp,"       %s-%s HV test",lChan[c%2],lFPGA[c/2]);
 		if(ref.V20[c]>=0 && V20[c]<0) {V20[c]=ref.V20[c]; V20var[c]=ref.V20var[c];}
-		else if(abs(V20[c]-ref.V20[c])>1 || abs(V20var[c]-ref.V20var[c])>1) fprintf(flog,"[%s]   hvtest.txt %s DB entry was updated (V20)\n",stime,lcmp);
-		fprintf(f,"%s: %3d %3d",lcmp,V20[c],V20var[c]);
+		else if(abs(V20[c]-ref.V20[c])>1 || fabs(V20var[c]-ref.V20var[c])>0.5) fprintf(flog,"[%s]   hvtest.txt %s DB entry was updated (V20)\n",stime,lcmp);
+		fprintf(f,"%s: %3d %4.1f",lcmp,V20[c],V20var[c]);
 		
 		if(ref.Vfull[c]>=0 && Vfull[c]<0) {Vfull[c]=ref.Vfull[c]; Vfullvar[c]=ref.Vfullvar[c]; Ifull[c]=ref.Ifull[c];}
-		else if(abs(Vfull[c]-ref.Vfull[c])>1 || abs(Vfullvar[c]-ref.Vfullvar[c])>1 || abs(Ifull[c]-ref.Ifull[c])>50) fprintf(flog,"[%s]   hvtest.txt %s DB entry was updated (Vfull)\n",stime,lcmp);
-		fprintf(f," %3d %3d %4d",Vfull[c],Vfullvar[c],Ifull[c]);
+		else if(abs(Vfull[c]-ref.Vfull[c])>1 || fabs(Vfullvar[c]-ref.Vfullvar[c])>0.5 || abs(Ifull[c]-ref.Ifull[c])>50) fprintf(flog,"[%s]   hvtest.txt %s DB entry was updated (Vfull)\n",stime,lcmp);
+		fprintf(f," %3d %4.1f %4d",Vfull[c],Vfullvar[c],Ifull[c]);
 		
 		if(ref.I1000[c]>=0 && I1000[c]<0) I1000[c]=ref.I1000[c];
 		else if(abs(I1000[c]-ref.I1000[c])>50) fprintf(flog,"[%s]   hvtest.txt %s DB entry was updated (I1000)\n",stime,lcmp);

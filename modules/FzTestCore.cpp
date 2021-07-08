@@ -264,7 +264,7 @@ int FzTest::TestAnalog() {
 	// ADC status
 	adcmask=0;
 	for(c=0;c<6;c++) {
-		if((((gomask)&(1<<c))>>c)==0 && blvar[c2ch[c]]==0) adcmask|=(1<<c);
+		if((((gomask)&(1<<c))>>c)==0 && blvar[c2ch[c]] < 0.1) adcmask|=(1<<c);
 	}
 	
 	tAnalog=true;
@@ -301,7 +301,7 @@ int FzTest::OffCheck(const int ch) {
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
-	if((ret=BLmeas(ch,10,bl+ch,blvar+ch))<0) return ret;
+	if((ret=BLmeas(ch, 10, bl+ch, blvar+ch))<0) return ret;
 	if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) return 0;
 	
 	c=ch2c[ch];
@@ -329,9 +329,9 @@ int FzTest::OffCheck(const int ch) {
 }
 
 //BL offset measurement
-int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
-	int ret,N=0,tmp,min=9999,max=-9999;
-	double av=0;
+int FzTest::BLmeas(const int ch, const int tries, int *Bl, double *Blvar) {
+	int ret, N=0, tmp;
+	double avdiff, av=0, sd=0;
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
@@ -341,16 +341,20 @@ int FzTest::BLmeas(const int ch,const int tries,int *Bl,int *Blvar) {
 		if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d",&tmp);
 		if(ret==1) {
-			tmp=(tmp<32768)?tmp:(tmp-65536);
-			av+=(double)tmp;
+			//running average and standard deviation (after tmp sign adjustment)
+			tmp = (tmp<32768) ? tmp : (tmp-65536);
+			avdiff = ((double)tmp - av);
 			N++;
-			if(tmp<min) min=tmp;
-			if(tmp>max) max=tmp;
+			av += avdiff / N;
+			sd += avdiff * ((double)tmp - av);
 		}
 	}
 	if(N==tries) {
-		if(Bl!=nullptr) *Bl=(int)round(av/((double)N));
-		if(Blvar!=nullptr) *Blvar=max-min;
+		if(Bl    != nullptr) *Bl    = (int)round(av);
+		if(Blvar != nullptr) {
+			if(tries < 2) *Blvar = -10000;
+			else          *Blvar = sqrt(sd / (N - 1));
+		}
 		return 0;
 	}
 	return -20;
@@ -703,10 +707,10 @@ int FzTest::ApplyManyHV(const int testmask,const int *V) {
 }
 
 //Measure I and V (use only when card is calibrated!)
-int FzTest::IVmeas(const int c,int *V,int *Vvar,int *I,bool wait) {
-	int ret,Nch=0,Nstab=0,Vtmp,Vmax,Vmin,Itmp,old=-1,dir=0,oldir=0;
+int FzTest::IVmeas(const int c, int *V, double *Vvar, int *I, bool wait) {
+	int ret,Nch=0,Nstab=0,Vtmp,Itmp,old=-1,dir=0,oldir=0;
 	char query[SLENG];
-	double av;
+	double avdiff, av=0, sd=0;
 	uint8_t reply[MLENG];
 	
 	if(I==nullptr) wait=false;
@@ -744,23 +748,25 @@ int FzTest::IVmeas(const int c,int *V,int *Vvar,int *I,bool wait) {
 	}
 	
 	//voltage measurement (3 meas at 0.5s interval)
-	Vmax=0; Vmin=500; Nch=0; av=0;
+	Nch=0;
 	sprintf(query,"%s,%d",lFPGA[c/2],c%2+1);
 	for(int i=0;i<3;i++) {
 		usleep(500000);
 		if((ret=sock->Send(blk,fee,0x88,query,reply,fVerb))) return ret;
 		ret=sscanf((char *)reply,"0|%d,%*d",&Vtmp);
 		if(ret==1) {
-			av-=(double)Vtmp;
+			//running average and standard deviation (after Vtmp sign change)
+			Vtmp   = -Vtmp;
+			avdiff = ((double)Vtmp - av);
 			Nch++;
-			if(-Vtmp<Vmin) Vmin=-Vtmp;
-			if(-Vtmp>Vmax) Vmax=-Vtmp;
+			av += avdiff / Nch;
+			sd += avdiff * ((double)Vtmp - av);
 		}
 	}
 	if(Nch==3) {
-		Vtmp=(int)(0.5+av/((double)Nch));
-		if(V!=nullptr) *V=Vtmp;
-		if(Vvar!=nullptr) *Vvar=Vmax-Vmin;
+		Vtmp = (int)(0.5+av);
+		if(V    != nullptr) *V    = Vtmp;
+		if(Vvar != nullptr) *Vvar = sqrt(sd / (Nch - 1));
 		if(!fVerb) printf(UP GRN "IVmeas  " Mag " %s-%s" NRM "                                                " BLD "%3d" NRM "  V  " BLD "%5d" NRM " nA\n",lChan[c%2],lFPGA[c/2],Vtmp,Itmp);
 		return 0;
 	}
@@ -768,11 +774,11 @@ int FzTest::IVmeas(const int c,int *V,int *Vvar,int *I,bool wait) {
 }
 
 //Measure multiple I and V (use only when card is calibrated!)
-int FzTest::ManyIVmeas(const int testmask,int *V,int *Vvar,int *I,bool wait) {
+int FzTest::ManyIVmeas(const int testmask, int *V, double *Vvar, int *I, bool wait) {
 	int c,ret,cnt,Nch[4]={0,0,0,0},Nstab[4]={0,0,0,0},old[4]={-1,-1,-1,-1},dir[4]={0,0,0,0},oldir[4]={0,0,0,0};
-	int Vtmp,Vmax[4]={0,0,0,0},Vmin[4]={500,500,500,500},Itmp[4]={0,0,0,0};
+	int Vtmp,Itmp[4]={0,0,0,0};
 	char query[SLENG];
-	double av[4]={0,0,0,0};
+	double avdiff, av[4]={0,0,0,0}, sd[4]={0,0,0,0};
 	uint8_t reply[MLENG];
 	bool stable[4]={false, false, false, false };
 	
@@ -852,10 +858,12 @@ int FzTest::ManyIVmeas(const int testmask,int *V,int *Vvar,int *I,bool wait) {
 			if((ret=sock->Send(blk,fee,0x88,query,reply,fVerb))) return ret;
 			ret=sscanf((char *)reply,"0|%d,%*d",&Vtmp);
 			if(ret==1) {
-				av[c]-=(double)Vtmp;
+				//running average and standard deviation (after Vtmp sign change)
+				Vtmp   = -Vtmp;
+				avdiff = ((double)Vtmp - av[c]);
 				Nch[c]++;
-				if(-Vtmp<Vmin[c]) Vmin[c]=-Vtmp;
-				if(-Vtmp>Vmax[c]) Vmax[c]=-Vtmp;
+				av[c] += avdiff / Nch[c];
+				sd[c] += avdiff * ((double)Vtmp - av[c]);
 			}
 			usleep(20000);
 		}
@@ -864,10 +872,10 @@ int FzTest::ManyIVmeas(const int testmask,int *V,int *Vvar,int *I,bool wait) {
 	if(!fVerb) printf(UP);
 	for(c=0;c<4;c++) {
 		if((testmask&(1<<c))==0) continue;
-		if(Nch[c]==3) {
-			Vtmp=(int)(0.5+av[c]/((double)(Nch[c])));
-			if(V!=nullptr) V[c]=Vtmp;
-			if(Vvar!=nullptr) Vvar[c]=Vmax[c]-Vmin[c];
+		if(Nch[c] == 3) {
+			Vtmp = (int)(0.5+av[c]);
+			if(V    != nullptr) V[c]    = Vtmp;
+			if(Vvar != nullptr) Vvar[c] = sqrt(sd[c] / (Nch[c] - 1));
 			if(!fVerb) printf(GRN "MIVmeas " Mag " %s-%s" NRM "                                                " BLD "%3d" NRM "  V  " BLD "%5d" NRM " nA\n",lChan[c%2],lFPGA[c/2],Vtmp,Itmp[c]);
 		}
 		else cnt++;

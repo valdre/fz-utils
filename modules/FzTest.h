@@ -35,31 +35,31 @@
 #define FAIL_HVHARD   1024
 
 //Constants
-static const char lFPGA[2][2]={"A","B"};
-static const char lChan[3][4]={"Si1","Si2","CsI"};
-static const char lADC[6][4]={"QH1"," I1","QL1"," Q2"," I2"," Q3"};
-static const char lADCs[6][4]={"QH1","I1","QL1","Q2","I2","Q3"};
-static const char lADCcomp[6][4]={"M80","M62","M45","M79","M61","M43"};
-static const bool is_charge[6]={true, false, true, true, false, true };
-static const int c2ch[6]={0,3,5,6,9,11};
-static const int ch2c[12]={0,0,0,1,1,2,3,3,3,4,4,5};
-static const char lvlabel[19][50]={Mag "      VP5REFA - M121" NRM,Mag "      VP5REFB - M54 " NRM,Mag "         VM27 - M78 " NRM,Cya "       VM2A1A - M92 " NRM,Cya "       VM2A2A - M114" NRM,Cya "       VM2A1B - M37 " NRM,Cya "       VM2A2B - M109" NRM,Blu "         VP37 - M33 " NRM,Cya "       VP3A1A - M104" NRM,Cya "       VP3A2A - M116" NRM,Cya "       VP3A1B - M47 " NRM,Cya "       VP3A2B - M111" NRM,Blu "        VP33A - M89 " NRM,Blu "        VP33D - M85 " NRM,Blu "         VP25 - M3  " NRM,Blu "          VP1 - M119" NRM,Blu "        VP18A - M103" NRM,Blu "        VP18B - M118" NRM,Blu "        VP18D - M90 " NRM};
-static const float vref[19]={5000,5000,2500,2000,2000,2000,2000,3700,3000,3000,3000,3000,3300,3300,2500,1000,1800,1800,1800};
-static const char lvnotes[19][15]={"From VP12_0","From VP12_0","From VP5_5_IN","From VM27","From VM27","From VM27","From VM27","From VP5_5_IN","From VP37","From VP37","From VP37","From VP37","From VP37","From VP37","From VP5_5_IN","From VP25","From VP25","From VP25","From VP25"};
+static const char lFPGA[2][2]    = {"A","B"};
+static const char lChan[3][4]    = {"Si1","Si2","CsI"};
+static const char lADC[6][4]     = {"QH1"," I1","QL1"," Q2"," I2"," Q3"};
+static const char lADCs[6][4]    = {"QH1","I1","QL1","Q2","I2","Q3"};
+static const char lADCcomp[6][4] = {"M80","M62","M45","M79","M61","M43"};
+static const bool is_charge[6]   = {true, false, true, true, false, true };
+static const int  c2ch[6]        = {0,3,5,6,9,11};
+static const int  ch2c[12]       = {0,0,0,1,1,2,3,3,3,4,4,5};
+static const char lvlabel[19][50]= {Mag "      VP5REFA - M121" NRM,Mag "      VP5REFB - M54 " NRM,Mag "         VM27 - M78 " NRM,Cya "       VM2A1A - M92 " NRM,Cya "       VM2A2A - M114" NRM,Cya "       VM2A1B - M37 " NRM,Cya "       VM2A2B - M109" NRM,Blu "         VP37 - M33 " NRM,Cya "       VP3A1A - M104" NRM,Cya "       VP3A2A - M116" NRM,Cya "       VP3A1B - M47 " NRM,Cya "       VP3A2B - M111" NRM,Blu "        VP33A - M89 " NRM,Blu "        VP33D - M85 " NRM,Blu "         VP25 - M3  " NRM,Blu "          VP1 - M119" NRM,Blu "        VP18A - M103" NRM,Blu "        VP18B - M118" NRM,Blu "        VP18D - M90 " NRM};
+static const float vref[19]      = {5000,5000,2500,2000,2000,2000,2000,3700,3000,3000,3000,3000,3300,3300,2500,1000,1800,1800,1800};
+static const char lvnotes[19][15]= {"From VP12_0","From VP12_0","From VP5_5_IN","From VM27","From VM27","From VM27","From VM27","From VP5_5_IN","From VP37","From VP37","From VP37","From VP37","From VP37","From VP37","From VP5_5_IN","From VP25","From VP25","From VP25","From VP25"};
 //Offset constants
-static const float blref3[6]={-7403,-5650,-4500,-7403,-5650,-7403};
-static const float blref5[6]={-7403,-5160,-5800,-7403,-4287,-7403};
-static const float bltoll[6]={   30,  270, 1000,   30,  280,   30};
-static const float blvtol[6]={   15,   80,   80,   15,   80,   15};
+static const float blref3[6]     = {-7403,-5650,-4500,-7403,-5650,-7403};
+static const float blref5[6]     = {-7403,-5160,-5800,-7403,-4287,-7403};
+static const float bltoll[6]     = {   30,  270, 1000,   30,  280,   30};
+static const float blvtol[6]     = {    5,   30,   30,    5,   30,   10};
 //DC level constants
 static const int dcref     =  675;
 static const int dcsigma   =   16;
 static const int reacref   = 2448;
 static const int reacsigma =   40;
-//HV constants:                Si1     Si2
-static const int maxhv3[2]={    200,    350};
-static const int maxhv4[2]={    300,    400};
-static const int    V2D[2]={    140,     85}; //DAC units per Volt (typical value)
+//HV constants:                 Si1     Si2
+static const int maxhv3[2] ={    200,    350};
+static const int maxhv4[2] ={    300,    400};
+static const int    V2D[2] ={    140,     85}; //DAC units per Volt (typical value)
 
 class FzTest {
 public:
@@ -83,12 +83,12 @@ private:
 	int TestAnalog();
 	int SetSN(const int sn);
 	int OffCheck(const int ch);
-	int BLmeas(const int ch, const int tries, int *Bl, int *Blvar);
+	int BLmeas(const int ch, const int tries, int *Bl, double *Blvar);
 	int HVCalChan(const int c, const int max, const bool dac);
 	int ApplyHV(const int c, const int V);
 	int ApplyManyHV(const int testmask, const int *V);
-	int IVmeas(const int c, int *V, int *Vvar, int *I, bool wait=true);
-	int ManyIVmeas(const int testmask, int *V, int *Vvar, int *I, bool wait=true);
+	int IVmeas(const int c, int *V, double *Vvar, int *I, bool wait=true);
+	int ManyIVmeas(const int testmask, int *V, double *Vvar, int *I, bool wait=true);
 	int IVADC(const int c, double *V, int *Vvar, double *I, bool wait=true);
 	int LinReg(const int n, const double *x, const double *y, double *p1, double *p0);
 	int SetDAC(const int c, const int vset, int vprev=-1);
@@ -112,9 +112,9 @@ private:
 	int blk,fee;
 	
 	//FEE data
-	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],blvar[12],dacoff[6],dcreact[6],offmatrix[6][103],hvmask,V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
+	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],dacoff[6],dcreact[6],offmatrix[6][103],hvmask,V20[4],Vfull[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
-	double Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
+	double blvar[12], V20var[4],Vfullvar[4],Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 	int failmask,tcal[4];
 };
 
@@ -126,9 +126,9 @@ public:
 	~FzTestRef();
 	
 	//FEE data
-	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],blvar[12],dacoff[6],dcreact[6],hvmask,V20[4],V20var[4],Vfull[4],Vfullvar[4],Ifull[4],I1000[4];
+	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],dacoff[6],dcreact[6],hvmask,V20[4],Vfull[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
-	double Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
+	double blvar[12], V20var[4],Vfullvar[4],Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 };
 
 #endif

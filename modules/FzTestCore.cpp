@@ -26,6 +26,7 @@ FzTest::~FzTest() {
 FzTestRef::FzTestRef() {
 	int c;
 	
+	Score=-1; HVScore=-1;
 	v4=-1; sn=-1;
 	for(c=0;c<6;c++) temp[c]=-1;
 	strcpy(vPIC,"");
@@ -49,6 +50,7 @@ void FzTest::Init() {
 	int c;
 	
 	failmask=0;
+	Score=-1; HVScore=-1;
 	v4=-1; sn=-1;
 	for(c=0;c<6;c++) temp[c]=-1;
 	strcpy(vPIC,"");
@@ -301,7 +303,7 @@ int FzTest::OffCheck(const int ch) {
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
-	if((ret=BLmeas(ch, 10, bl+ch, blvar+ch))<0) return ret;
+	if((ret=BLmeas(ch, 20, bl+ch, blvar+ch))<0) return ret;
 	if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) return 0;
 	
 	c=ch2c[ch];
@@ -313,13 +315,13 @@ int FzTest::OffCheck(const int ch) {
 	//Set DAC to 200 and test BL
 	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,200);
 	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-	usleep(1000);
-	if((ret=BLmeas(ch,5,&max,nullptr))<0) return ret;
+	usleep(10000);
+	if((ret=BLmeas(ch,10,&max,nullptr))<0) return ret;
 	//Set DAC to 400 and test BL
 	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,400);
 	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-	usleep(1000);
-	if((ret=BLmeas(ch,5,&min,nullptr))<0) return ret;
+	usleep(10000);
+	if((ret=BLmeas(ch,10,&min,nullptr))<0) return ret;
 	//Set DAC to previous value
 	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,old);
 	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
@@ -335,11 +337,11 @@ int FzTest::BLmeas(const int ch, const int tries, int *Bl, double *Blvar) {
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
-	sprintf(query,"%s,0x%d",lFPGA[ch/6],1036+100*(ch%6));
-	for(int i=0;i<tries;i++) {
-		usleep(10000);
-		if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
-		ret=sscanf((char *)reply,"0|%d",&tmp);
+	sprintf(query, "%s,0x%d", lFPGA[ch/6], 1036+100*(ch%6));
+	for(int i=0; i<tries; i++) {
+		usleep(1000);
+		if((ret = sock->Send(blk, fee, 0x85, query, reply, fVerb))) return ret;
+		ret = sscanf((char *)reply, "0|%d", &tmp);
 		if(ret==1) {
 			//running average and standard deviation (after tmp sign adjustment)
 			tmp = (tmp<32768) ? tmp : (tmp-65536);

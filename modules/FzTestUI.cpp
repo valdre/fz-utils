@@ -11,6 +11,8 @@
 int FzTest::FastTest(bool man) {
 	int c, N, Nfail, ret;
 	float ref;
+	double ComSc=0, ExtSc=0;
+	bool fEx=true;
 	
 	Init();
 	printf("\n\n");
@@ -28,6 +30,7 @@ int FzTest::FastTest(bool man) {
 	if(sn==65535) {
 		failmask|=FAIL_SN;
 		printf(YEL "Warn" NRM "                 %4s            No SN data\n",v4?"v4/5":"  v3");
+		fEx = false;
 	}
 	else printf(GRN "Pass" NRM "             %4s-%03d\n",v4?"v4/5":"  v3",sn);
 	
@@ -36,16 +39,22 @@ int FzTest::FastTest(bool man) {
 	printf("         PIC Version ");
 	if(strcmp(vPIC,v4?LASTVPICV4:LASTVPICV3)) {
 		failmask|=FAIL_FW;
-		printf(YEL"Warn" NRM " %20s %10s Obsolete firmware\n",vPIC,v4?LASTVPICV4:LASTVPICV3);
+		printf(YEL "Warn" NRM " %20s %10s Obsolete firmware\n",vPIC,v4?LASTVPICV4:LASTVPICV3);
 	}
-	printf(GRN "Pass" NRM " %20s %10s\n",vPIC,v4?LASTVPICV4:LASTVPICV3);
+	else {
+		printf(GRN "Pass" NRM " %20s %10s\n",vPIC,v4?LASTVPICV4:LASTVPICV3);
+		ExtSc += 4;
+	}
 	for(c=0;c<2;c++) {
 		printf("      FPGA %s Version ",lFPGA[c]);
 		if(strcmp(vFPGA[c],LASTVFPGA)) {
 			failmask|=FAIL_FW;
 			printf(YEL"Warn" NRM " %20s %10s Obsolete firmware\n",vFPGA[c],LASTVFPGA);
 		}
-		else printf(GRN "Pass" NRM " %20s %10s\n",vFPGA[c],LASTVFPGA);
+		else {
+			printf(GRN "Pass" NRM " %20s %10s\n",vFPGA[c],LASTVFPGA);
+			ExtSc += 3;
+		}
 	}
 	
 	//Temperatures
@@ -70,15 +79,23 @@ int FzTest::FastTest(bool man) {
 	
 	//Low voltages
 	printf(BLD "\nLow voltages (in mV, measured by " Mag "M46" BLD ", " Cya "M1" BLD " and " Blu "M2" BLD "):\n" NRM);
+	ComSc -= 9;
 	for(c=0;c<19;c++) {
-		if(lv[c]==-2) continue;
+		if(lv[c]==-2) {
+			ComSc += 1;
+			continue;
+		}
 		printf("%s ",lvlabel[c]);
 		if(fabs(vref[c]-(double)(lv[c]))/vref[c]>=0.05) {
 			failmask|=FAIL_LV;
 			printf(RED "Fail" NRM);
+			fEx = false;
 		}
-		else printf(GRN "Pass" NRM);
-		printf(" %20d %10.0f %s\n",lv[c],vref[c],lvnotes[c]);
+		else {
+			printf(GRN "Pass" NRM);
+			ComSc += 1;
+		}
+		printf(" %20d %10.0f %s\n", lv[c], vref[c], lvnotes[c]);
 	}
 	
 	//Analog chain test (Pre-Amp, DC offsets and ADCs)
@@ -86,21 +103,33 @@ int FzTest::FastTest(bool man) {
 	
 	// Pre-amp Go/NoGo test
 	printf(BLD "\nPre-amplifiers Go / NOGo test:\n" NRM);
-	for(c=0;c<6;c++) {
-		if(adcmask&(1<<c)) continue; //Skip line if ADC is broken
+	ComSc -= 2;
+	for(c=0; c<6; c++) {
+		if(adcmask&(1<<c)) {
+			ComSc += 2;
+			continue; //Skip line if ADC is broken
+		}
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
 		if((gomask&(1<<c))==0) {
 			failmask|=FAIL_PREAMP;
 			printf(RED "Fail" NRM);
+			fEx = false;
 		}
-		else printf(GRN "Pass" NRM);
+		else {
+			printf(GRN "Pass" NRM);
+			ComSc += 2;
+		}
 		printf("\n");
 	}
 	
 	//Baseline DC level
 	printf(BLD "\nBaseline DC level (in DAC units):\n" NRM);
+	ComSc -= 2;
 	for(c=0;c<6;c++) {
-		if(adcmask&(1<<c)) continue; //Skip line if ADC is broken
+		if(adcmask&(1<<c)) {
+			ComSc += 2;
+			continue; //Skip line if ADC is broken
+		}
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
 		Nfail=0;
 		if(abs(dacoff[c]-dcref) > 5*dcsigma) {
@@ -111,8 +140,14 @@ int FzTest::FastTest(bool man) {
 			failmask |= FAIL_OFFSET;
 			Nfail++;
 		}
-		if(Nfail == 0) printf(GRN "Pass" NRM);
-		else printf(RED "Fail" NRM);
+		if(Nfail == 0) {
+			printf(GRN "Pass" NRM);
+			ComSc += 2;
+		}
+		else {
+			printf(RED "Fail" NRM);
+			fEx = false;
+		}
 		
 		printf(" % 20d % 10d",dacoff[c],dcref);
 		if(abs(dcreact[c]-reacref) > 5*reacsigma) {
@@ -125,9 +160,16 @@ int FzTest::FastTest(bool man) {
 	
 	//Baseline offsets
 	printf(BLD "\nBaseline offsets (in ADC units):\n" NRM);
+	ComSc -= 2; ExtSc += 16;
 	for(c=0;c<12;c++) {
-		if(adcmask&(1<<ch2c[c]) && is_charge[c%6]) continue; //Skip line if ADC is broken
-		if((failmask&FAIL_OFFSET) && is_charge[c%6]) continue; //Skip line if a failure on DC level was already shown
+		if(adcmask&(1<<ch2c[c]) && is_charge[c%6]) {
+			ComSc += 1;
+			continue; //Skip line if ADC is broken
+		}
+		if((failmask&FAIL_OFFSET) && is_charge[c%6]) {
+			ComSc += 1;
+			continue; //Skip line if a failure on DC level was already shown
+		}
 		
 		printf("               %s-%s ",lADC[c%6],lFPGA[c/6]);ref=(v4)?blref5[c%6]:blref3[c%6];
 		Nfail=0;
@@ -135,16 +177,26 @@ int FzTest::FastTest(bool man) {
 			failmask |= FAIL_OFFSET;
 			Nfail++;
 		}
+		else ExtSc += 1 - fabs(ref-(double)(bl[c])) / bltoll[c%6];
+		
 		if(blvar[c] >= blvtol[c%6]) {
 			failmask |= FAIL_OFFSET;
 			Nfail++;
 		}
+		else ExtSc += 1 - blvar[c] / blvtol[c%6];
+		
 		if((c%6 == 5) && (blvar[c] < 3)) {
 			failmask |= FAIL_PREAMP;
 			Nfail++;
 		}
-		if(Nfail == 0) printf(GRN "Pass" NRM);
-		else printf(RED "Fail" NRM);
+		if(Nfail == 0) {
+			printf(GRN "Pass" NRM);
+			ComSc += 1;
+		}
+		else {
+			printf(RED "Fail" NRM);
+			fEx = false;
+		}
 		
 		printf(" % 20d % 10.0f",bl[c],ref);
 		if(blvar[c]>=blvtol[c%6]) {
@@ -163,13 +215,18 @@ int FzTest::FastTest(bool man) {
 	
 	//ADC
 	printf(BLD "\n100MHz ADCs status:\n" NRM);
+	ComSc -= 2;
 	for(c=0;c<6;c++) {
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
 		if(adcmask&(1<<c)) {
 			failmask|=FAIL_ADC;
 			printf(RED "Fail" NRM);
+			fEx = false;
 		}
-		else printf(GRN "Pass" NRM);
+		else {
+			printf(GRN "Pass" NRM);
+			ComSc += 2;
+		}
 		printf("\n");
 	}
 	
@@ -184,6 +241,15 @@ int FzTest::FastTest(bool man) {
 		else printf(GRN "Pass" NRM);
 		printf("\n");
 	}
+	
+	//Final score
+	Score = ComSc;
+	if(fEx) Score += ExtSc;
+	printf(BLD "\nFEE overall quality score: ");
+	if(Score < 60) printf(RED);
+	else if(Score < 85) printf(YEL);
+	else printf(GRN);
+	printf("%3.0f\n" NRM, Score);
 	
 	//If FastTest was launched in manual mode exit now.
 	if(man) return 0;
@@ -363,10 +429,10 @@ int FzTest::FastTest(bool man) {
 //HV extended test
 int FzTest::HVTest() {
 	int c,ret,max[4]={0,0,0,0},V[4],testmask=0;
-	double R;
+	double R, ComSc = 0, ExtSc = 0;
 	char query[SLENG];
 	uint8_t reply[MLENG];
-	bool sim=false;
+	bool sim=false, fEx=true;
 	
 	if(!tGeneral) {
 		printf(YEL "HVTest  " NRM " fast test was not performed. Performing general check only...\n");
@@ -377,8 +443,10 @@ int FzTest::HVTest() {
 		tHV[c]=false;
 		if((hvmask&(1<<c))==0) {
 			printf(" Channel" Mag " %s-%s" NRM " is not calibrated, skipping...\n",lChan[c%2],lFPGA[c/2]);
+			fEx = false;
 		}
 		else {
+			ComSc += 5;
 			printf(" Channel" Mag " %s-%s" NRM " is calibrated, test it [Y/n]? ",lChan[c%2],lFPGA[c/2]);
 			ret=getchar();
 			if(ret!='\n') {
@@ -405,12 +473,19 @@ int FzTest::HVTest() {
 	if((ret=ApplyManyHV(testmask,V))<0) goto err;
 	
 	//Check voltage stability and exclude unstable channels
+	ComSc -= 3; ExtSc += 3;
 	if((ret=ManyIVmeas(testmask,V20,V20var,nullptr,false))<0) goto err;
 	for(c=0;c<4;c++) {
 		if((testmask&(1<<c))==0) continue;
 		if(abs(V20[c]-20)>2 || V20var[c]>2) {
 			if((ret=ApplyHV(c,0))<0) goto err;
 			testmask&=(~(1<<c));
+			fEx = false;
+		}
+		else {
+			ComSc += 2;
+			ExtSc += 1. - ((double)(V20[c] - 20)) / 2.;
+			ExtSc += 2. - V20var[c];
 		}
 	}
 	
@@ -423,10 +498,23 @@ int FzTest::HVTest() {
 	if((ret=ApplyManyHV(testmask,V))<0) goto err;
 	
 	//Exclude again unstable channels
+	ComSc -= 3; ExtSc += 3;
 	for(c=0;c<4;c++) {
 		if((testmask&(1<<c))==0) continue;
 		if(abs(Vfull[c]-max[c])>20 || Vfullvar[c]>2) {
 			testmask&=(~(1<<c));
+			fEx = false;
+		}
+		else {
+			ComSc += 2;
+			ExtSc += 1. - ((double)(Vfull[c] - max[c])) / 20.;
+			ExtSc += 2. - Vfullvar[c];
+			
+			if(Ifull[c] <= 100) {
+				ComSc += 5;
+				ExtSc += 5. - ((double)(Ifull[c])) / 20.;
+			}
+			else fEx = false;
 		}
 	}
 	
@@ -533,6 +621,14 @@ int FzTest::HVTest() {
 	}
 	printf("----------------------------------------------------------------------------------------------------\n\n");
 	
+	//Final score
+	HVScore = ComSc;
+	if(fEx) HVScore += ExtSc;
+	printf(BLD "\nFEE HV quality score: ");
+	if(HVScore < 60) printf(RED);
+	else if(HVScore < 85) printf(YEL);
+	else printf(GRN);
+	printf("%3.0f\n" NRM, HVScore);
 	
 	if(failmask&FAIL_HVADC) {
 		printf("\nMeasured voltage and/or current are inconsistent with expected values. What do you want to do?\n");
@@ -633,49 +729,51 @@ int FzTest::Manual() {
 
 //Offset calibration routine
 int FzTest::OffCal() {
-	int target,c,i,ch,ret,ierr,dac1,dac2,bl1,bl2,dac,Bl,tmp;
-	char ctmp,query[SLENG];
+	int target, c, i, ch, ret, ierr, dac1, dac2, bl1, bl2, dac, Bl, tmp;
+	char ctmp, query[SLENG];
 	uint8_t reply[MLENG];
 	int finaldac[6];
 	
 	printf("\nTarget baseline [-7400]> ");
-	for(c=0;c<SLENG-1;c++) {
-		ctmp=getchar();
-		if(ctmp=='\n') break;
-		query[c]=ctmp;
+	for(c=0; c<SLENG-1; c++) {
+		ctmp = getchar();
+		if(ctmp == '\n') break;
+		query[c] = ctmp;
 	}
-	query[c]='\0';
-	if(c==0) target=-7400;
+	query[c] = '\0';
+	if(c==0) target = -7400;
 	else {
-		target=atoi(query);
+		target = atoi(query);
 		if(target<-8192 || target>8191) {
 			printf(YEL "OffCal  " NRM " invalid target. Set to -7400.\n");
-			target=-7400;
+			target = -7400;
 		}
 	}
-	for(c=0;c<6;c++) {
-		ch=c2ch[c];
+	for(c=0; c<6; c++) {
+		ch = c2ch[c];
+		printf(BLD "OffCal  " NRM " %s-%s: calibrating offset...\n" UP, lADC[ch%6], lFPGA[ch/6]);
 		//Reading original DAC value
-		sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+4);
-		if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
-		ret=sscanf((char *)reply,"0|%d",&dac);
-		if(ret!=1) return -20;
-		finaldac[c]=dac;
+		sprintf(query, "%s,%d", lFPGA[c/3], (c%3)+4);
+		if((ret = sock->Send(blk, fee, 0x85, query, reply, fVerb))) return ret;
+		ret = sscanf((char *)reply, "0|%d", &dac);
+		if(ret != 1) return -20;
+		finaldac[c] = dac;
 		
 		//Usually DAC should be around 700 but I prefer to start from lower values to avoid BL underflow
-		dac1=200; dac2=400;
+		dac1 = 200; dac2 = 400;
 		//Try DAC=200 and check bl
-		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,dac1);
-		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-		usleep(1000);
-		if((ret=BLmeas(ch,5,&bl1,nullptr))<0) return ret;
+		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac1);
+		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
+		usleep(10000);
+		if((ret = BLmeas(ch, 20, &bl1, nullptr)) < 0) return ret;
 		//Try DAC=400 and check bl
-		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,dac2);
-		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-		usleep(1000);
-		if((ret=BLmeas(ch,5,&bl2,nullptr))<0) return ret;
+		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac2);
+		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
+		usleep(10000);
+		if((ret = BLmeas(ch, 20, bl+ch, blvar+ch))<0) return ret;
+		bl2 = bl[ch];
+		
 		//Always check stability!
-		if((ret=OffCheck(ch))<0) return ret;
 		if(bl[ch]>=8100 || bl[ch]<=-8100) {
 			printf(YEL "OffCal  " NRM " %s-%s: saturating baseline\n",lADC[ch%6],lFPGA[ch/6]);
 			continue;
@@ -684,58 +782,59 @@ int FzTest::OffCal() {
 			printf(YEL "OffCal  " NRM " %s-%s: unstable DC level\n",lADC[ch%6],lFPGA[ch/6]);
 			continue;
 		}
-		if(dcreact[c]<1000) {
+		if(dcreact[c] < 1000) {
 			printf(YEL "OffCal  " NRM " %s-%s: DC level is not responsive\n",lADC[ch%6],lFPGA[ch/6]);
 			continue;
 		}
+		
 		//Fast search procedure
 		ierr=0; Bl=10000;
-		for(i=0;;i++) {
-			if(bl1<=bl2) {
-				if(dac1<=dac2) ierr=1;
+		for(i=0; ; i++) {
+			if(bl1 <= bl2) {
+				if(dac1 <= dac2) ierr=1;
 				else {
-					dac=dac1;  tmp=bl1;
-					dac1=dac2; bl1=bl2;
-					dac2=dac;  bl2=tmp;
+					dac  = dac1;  tmp = bl1;
+					dac1 = dac2;  bl1 = bl2;
+					dac2 = dac;   bl2 = tmp;
 				}
 			}
-			dac=dac1+(int)(0.5+((double)(target-bl1))*((double)(dac2-dac1))/((double)(bl2-bl1)));
+			dac = dac1 + (int)(0.5 + ((double)(target-bl1)) * ((double)(dac2-dac1)) / ((double)(bl2-bl1)));
 			if((dac<0) || (dac>1023)) {ierr=2; break;}
-			if((abs(dac2-dac1)<10) || (abs(Bl-target)<20)) break;
+			if((abs(dac2 - dac1) < 10) || (abs(Bl - target) < 20)) break;
 			if((i>=5) || ierr) break;
 			
-			sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,dac);
-			if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-			usleep(1000);
-			if((ret=BLmeas(ch,5,&Bl,nullptr))<0) return ret;
+			sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac);
+			if((ret=sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
+			usleep(10000);
+			if((ret = BLmeas(ch, 10, &Bl, nullptr)) < 0) return ret;
 			
-			if(target<bl2) {bl1=Bl; dac1=dac;}
-			else if(target<bl1) {
-				if(Bl>=target) {bl2=Bl; dac2=dac;}
-				else {bl1=Bl; dac1=dac;}
+			if(target < bl2) {bl1=Bl; dac1=dac;}
+			else if(target < bl1) {
+				if(Bl >= target) {bl2 = Bl; dac2 = dac;}
+				else {bl1 = Bl; dac1 = dac;}
 			}
-			else {bl2=Bl; dac2=dac;}
+			else {bl2 = Bl; dac2 = dac;}
 		}
 		if((i>=5) || ierr) {
-			printf(YEL "OffCal  " NRM " %s-%s: DC level reaction is anomalous (i=%d bl1=%d bl2=%d dac1=%d dac2=%d)\n",lADC[ch%6],lFPGA[ch/6],i,bl1,bl2,dac1,dac2);
+			printf(YEL "OffCal  " NRM " %s-%s: DC level reaction is anomalous (i=%d bl1=%d bl2=%d dac1=%d dac2=%d)\n", lADC[ch%6], lFPGA[ch/6], i, bl1, bl2, dac1, dac2);
 			continue;
 		}
-		finaldac[c]=dac;
+		finaldac[c] = dac;
 	}
 	
-	for(c=0;c<6;c++) {
-		ch=c2ch[c];
-		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,finaldac[c]);
-		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-		usleep(1000);
-		if((ret=BLmeas(ch,5,&Bl,nullptr))<0) return ret;
-		printf(GRN "OffCal  " NRM " %s-%s: DAC set to %4d. BL -> % 5d\n",lADC[ch%6],lFPGA[ch/6],finaldac[c],(Bl<32768)?Bl:(Bl-65536));
+	for(c=0; c<6; c++) {
+		ch = c2ch[c];
+		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, finaldac[c]);
+		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
+		usleep(10000);
+		if((ret = BLmeas(ch, 10, &Bl, nullptr)) < 0) return ret;
+		printf(GRN "OffCal  " NRM " %s-%s: DAC set to %4d. BL -> % 5d\n", lADC[ch%6], lFPGA[ch/6], finaldac[c], (Bl<32768)?Bl:(Bl-65536));
 	}
 	//Writing DAC values to PIC EEPROM
-	if((ret=sock->Send(blk,fee,0x8E,"",reply,fVerb))) return ret;
+	if((ret = sock->Send(blk, fee, 0x8E, "", reply, fVerb))) return ret;
 	
 	//Testing new BL values
-	if((ret=TestAnalog())<0) return ret;
+	if((ret = TestAnalog())<0) return ret;
 	return 0;
 }
 
@@ -764,7 +863,7 @@ int FzTest::OffCurve() {
 		}
 		if(!fVerb) printf(BLD "%4d" NRM,dac);
 		for(c=0;c<6;c++) {
-			if((ret=BLmeas(c2ch[c],3,&mes,nullptr))<0) return ret;
+			if((ret=BLmeas(c2ch[c],10,&mes,nullptr))<0) return ret;
 			if(!fVerb) printf(" % 6d",mes);
 			offmatrix[c][dac/10]=mes;
 		}
@@ -1165,7 +1264,15 @@ void FzTest::UpdateDB() {
 			ret=sscanf(row," %[^:]: %[^\n]",label,data);
 			//ret==1 is ok, it means "untested", so I can continue because ref is initialized with "untested" values
 			if(ret!=2) continue;
-			if(strcmp(label,"FEE version")==0) {
+			if(strcmp(label,"General score")==0) {
+				ref.Score=atof(data);
+				if(ref.Score<0 || ref.Score>100) ref.Score=-1;
+			}
+			else if(strcmp(label,"HV score")==0) {
+				ref.HVScore=atof(data);
+				if(ref.HVScore<0 || ref.HVScore>100) ref.HVScore=-1;
+			}
+			else if(strcmp(label,"FEE version")==0) {
 				if(strcmp(data,"v4/5")==0) ref.v4=1;
 				else if(strcmp(data,"v3")==0) ref.v4=0;
 			}
@@ -1210,6 +1317,15 @@ void FzTest::UpdateDB() {
 		fclose(flog);
 		return;
 	}
+	fprintf(f,"# !!! NEW DB format !!!\n");
+	if(ref.Score>=0 && Score<0) Score=ref.Score;
+	if(ref.Score!=Score) fprintf(flog,"[%s]  general.txt        General score DB entry was updated\n",stime);
+	fprintf(f,"       General score:        %3.0f\n", Score);
+	
+	if(ref.HVScore>=0 && HVScore<0) HVScore=ref.HVScore;
+	if(ref.HVScore!=HVScore) fprintf(flog,"[%s]  general.txt             HV score DB entry was updated\n",stime);
+	fprintf(f,"            HV score:        %3.0f\n", HVScore);
+	
 	if(ref.v4>=0 && v4<0) v4=ref.v4;
 	if(ref.v4!=v4) fprintf(flog,"[%s]  general.txt          FEE version DB entry was updated\n",stime);
 	fprintf(f,"         FEE version: %10s\n",(v4<0)?"":((v4>0)?"v4/5":"v3"));

@@ -50,7 +50,7 @@ static const char lvnotes[19][15]= {"From VP12_0","From VP12_0","From VP5_5_IN",
 static const float blref3[6]     = {-7403,-5650,-4500,-7403,-5650,-7403};
 static const float blref5[6]     = {-7403,-5160,-5800,-7403,-4287,-7403};
 static const float bltoll[6]     = {   30,  270, 1000,   30,  280,   30};
-static const float blvtol[6]     = {    5,   30,   30,    5,   30,   10};
+static const float blvtol[6]     = {    6,   25,   30,    6,   25,   15};
 //DC level constants
 static const int dcref     =  675;
 static const int dcsigma   =   16;
@@ -114,7 +114,7 @@ private:
 	//FEE data
 	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],dacoff[6],dcreact[6],offmatrix[6][103],hvmask,V20[4],Vfull[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
-	double blvar[12], V20var[4],Vfullvar[4],Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
+	double Score, HVScore, blvar[12], V20var[4],Vfullvar[4],Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 	int failmask,tcal[4];
 };
 
@@ -128,7 +128,7 @@ public:
 	//FEE data
 	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],dacoff[6],dcreact[6],hvmask,V20[4],Vfull[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
-	double blvar[12], V20var[4],Vfullvar[4],Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
+	double Score, HVScore, blvar[12], V20var[4],Vfullvar[4],Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 };
 
 #endif

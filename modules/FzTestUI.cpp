@@ -772,7 +772,7 @@ int FzTest::OffCal() {
 		usleep(10000);
 		if((ret = BLmeas(ch, 20, bl+ch, blvar+ch))<0) return ret;
 		bl2 = bl[ch];
-		dcreact[ch] = bl1 - bl2;
+		dcreact[c] = bl1 - bl2;
 		
 		//Always check stability!
 		if(bl[ch]>=8100 || bl[ch]<=-8100) {

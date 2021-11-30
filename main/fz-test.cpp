@@ -9,11 +9,10 @@
 #include "FzTest.h"
 
 int main(int argc, char *argv[]) {
-	int c,ret,tmp,blk=0,fee=0,dump=0,lock=0;
-	bool verb=false,serial=true,autom=true;
-	char *target,device[SLENG],kdevice[SLENG],hname[SLENG]="regboard0",romfile[MLENG]="";
+	int c, ret, tmp, blk = 0, fee = 0, dump = 0, lock = 0;
+	bool verb = false, serial = true, autom = true, shutdown = false;
+	char *target, device[SLENG] = "", kdevice[SLENG] = "", hname[SLENG] = "regboard0", romfile[MLENG] = "";
 	
-	device[0]='\0'; kdevice[0]='\0';
 	//Decode options
 	while((c=getopt(argc,argv,"hvmud:n:k:b:f:r:w:"))!=-1) {
 		switch(c) {
@@ -71,14 +70,14 @@ int main(int argc, char *argv[]) {
 	}
 	
 	//Open FEE or RB
-	if(serial && strlen(device)<1) target=nullptr;
-	else target=device;
-	FzSC sock(lock,serial,serial?target:hname,false,blk,fee);
+	if(serial && strlen(device) < 1) target = nullptr;
+	else target = device;
+	FzSC sock(lock, serial, serial ? target : hname, false, blk, fee);
 	if(!(sock.SockOK())) return 0;
 	if(sock.IsBC()) {
 		//BC connection: FEE needs to be powered up
 		uint8_t reply[MLENG];
-		if((ret=sock.Send(blk,8,0x83,"",reply,verb))) {
+		if((ret = sock.Send(blk, 8, 0x83, "", reply, verb))) {
 			printf(RED "fz-test " NRM " FEE power on failed (Send)\n");
 			return 0;
 		}

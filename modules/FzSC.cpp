@@ -7,7 +7,7 @@
 
 #include "FzSC.h"
 
-FzSC::FzSC(int &lockmask, const bool serial, const char *target, const bool keithley, const int blk,  const int fee) {
+FzSC::FzSC(int &lockmask, const bool serial, const char *target, const bool keithley, const int blk,  const int fee, const bool verb) {
 	int i;
 	char name[SLENG], kreply[MLENG];
 	uint8_t reply[MLENG];
@@ -46,9 +46,11 @@ FzSC::FzSC(int &lockmask, const bool serial, const char *target, const bool keit
 			if(keithley) {
 				//Serial communication with Keithley 2000 multimeter
 				if(TTYOpen(name, B19200) >= 0) {
+					fSockOK = true;
 					//Reset Keithley
 					if(KSend("*RST", nullptr, false)<0) {
 						close(sockfd);
+						fSockOK = false;
 						if(target == nullptr) continue;
 						else break;
 					}
@@ -56,40 +58,41 @@ FzSC::FzSC(int &lockmask, const bool serial, const char *target, const bool keit
 					//Check if Keithley answers correctly
 					if(KSend("*IDN?", kreply, false, true)<0) {
 						close(sockfd);
+						fSockOK = false;
 						if(target == nullptr) continue;
 						else break;
 					}
 					if(strncmp(kreply, "KEITHLEY INSTRUMENTS INC.", 25)) {
 						close(sockfd);
+						fSockOK = false;
 						if(target == nullptr) continue;
 						else break;
 					}
-					fSockOK = true;
 					break;
 				}
 			}
 			else {
 				//Serial communication with FEE (via ERNI connector or block card)
 				if(TTYOpen(name, B115200)>=0) {
+					fSockOK = true;
 					//Check if PS or FEE answers correctly
-					if(Send(blk, 8, 0x85, "", reply, false, true) >= 0) {
-						fSockOK = true;
+					if(Send(blk, 8, 0x85, "", reply, verb, true) >= 0) {
 						fBC     = true;
 					}
-					else if(Send(blk, fee, 0x83, "", reply, false, true) >= 0) {
-						fSockOK = true;
-					}
-					else {
+					else if(Send(blk, fee, 0x83, "", reply, verb, true) < 0) {
 						close(sockfd);
+						fSockOK = false;
 						if(target == nullptr) continue;
-						else break;
 					}
 					break;
 				}
 			}
 			if(target != nullptr) break;
 		}
-		if(!fSockOK) printf(UP RED "FzSC    " NRM " TTY opening failed        \n");
+		if(!fSockOK) {
+			if(keithley) printf(UP YEL "FzSC    " NRM " Keithley multimeter not found      \n");
+			else printf(UP RED "FzSC    " NRM " TTY opening failed        \n");
+		}
 		else {
 			printf(UP GRN "FzSC    " NRM " TTY opened at %s (%s)\n",name,fKeith?"Keithley":"FEE");
 			lockmask|=(1<<i);

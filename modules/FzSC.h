@@ -47,7 +47,7 @@
 class FzSC {
 public:
 	//Using UDP protocol by default. With serial=1 RS232 protocol is used instead (set target=<device>, e.g. "/dev/ttyUSB0". nullptr means auto recognition)
-	FzSC(int &lockmask, const bool serial=false, const char *target=nullptr, const bool keithley=false, const int blk=0,  const int fee=0);
+	FzSC(int &lockmask, const bool serial=false, const char *target=nullptr, const bool keithley=false, const int blk=0,  const int fee=0, const bool verb = false);
 	~FzSC();
 	
 	int Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb=0, bool nowait=false);

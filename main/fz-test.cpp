@@ -14,16 +14,19 @@ int main(int argc, char *argv[]) {
 	char *target, device[SLENG] = "", kdevice[SLENG] = "", hname[SLENG] = "regboard0", romfile[MLENG] = "";
 	
 	//Decode options
-	while((c=getopt(argc,argv,"hvmud:n:k:b:f:r:w:"))!=-1) {
+	while((c = getopt(argc, argv, "hvmsud:n:k:b:f:r:w:")) != -1) {
 		switch(c) {
 			case 'v':
-				verb=true;
+				verb = true;
 				break;
 			case 'u':
-				serial=false;
+				serial = false;
 				break;
 			case 'm':
-				autom=false;
+				autom = false;
+				break;
+			case 's':
+				shutdown = true;
 				break;
 			case 'd':
 				if(optarg!=NULL && strlen(optarg)<SLENG) strcpy(device,optarg);
@@ -56,6 +59,7 @@ int main(int argc, char *argv[]) {
 				printf("    -h         this help\n");
 				printf("    -v         enable verbose output\n");
 				printf("    -m         manual operation (skip automatic checks)\n");
+				printf("    -s         shutdown FEE cards at the end (only with block card connection)\n");
 				printf("    -u         use UDP protocol (via RB) [by default direct RS232 is used]\n");
 				printf("    -d <dev>   specify the FEE serial device (used only without UDP) [default: auto]\n");
 				printf("    -n <dev>   specify the RB hostname (used only with UDP) [default: regboard0]\n");
@@ -72,22 +76,25 @@ int main(int argc, char *argv[]) {
 	//Open FEE or RB
 	if(serial && strlen(device) < 1) target = nullptr;
 	else target = device;
-	FzSC sock(lock, serial, serial ? target : hname, false, blk, fee);
+	FzSC sock(lock, serial, serial ? target : hname, false, blk, fee, verb);
 	if(!(sock.SockOK())) return 0;
 	if(sock.IsBC()) {
-		//BC connection: FEE needs to be powered up
+		//BC connection: FEE may need to be powered up
 		uint8_t reply[MLENG];
-		if((ret = sock.Send(blk, 8, 0x83, "", reply, verb))) {
-			printf(RED "fz-test " NRM " FEE power on failed (Send)\n");
-			return 0;
+		if(sock.Send(blk, fee, 0xA5, "Q", reply, verb)) {
+			if(sock.Send(blk, 8, 0x83, "", reply, verb)) {
+				printf(RED "fz-test " NRM " FEE power on failed (Send)\n");
+				return 0;
+			}
+			if(strcmp((char *)reply, "0|")) {
+				printf(RED "fz-test " NRM " FEE power on failed (bad reply)\n");
+				return 0;
+			}
+			printf(BLD "fz-test " NRM " Waiting 15s for power on...\n");
+			sleep(15);
+			printf(UP GRN "fz-test " NRM " FEEs powered on...          \n");
 		}
-		if(strcmp((char *)reply,"0|")) {
-			printf(RED "fz-test " NRM " FEE power on failed (bad reply)\n");
-			return 0;
-		}
-		printf(BLD "fz-test " NRM " Waiting 10s for power on...\n");
-		sleep(10);
-		printf(UP GRN "fz-test " NRM " FEEs powered on...          \n");
+		else printf(UP BLU "fz-test " NRM " FEEs were already powered on...          \n");
 	}
 	
 	//Open Keithley (except when dumping EEPROM)
@@ -137,7 +144,7 @@ int main(int argc, char *argv[]) {
 	ending:
 	test.UpdateDB();
 	
-	if(sock.IsBC()) {
+	if(sock.IsBC() && shutdown) {
 		uint8_t reply[MLENG];
 		if((ret=sock.Send(blk,8,0x84,"",reply,verb))) {
 			printf(RED "fz-test " NRM " FEE power off failed (send error)\n");

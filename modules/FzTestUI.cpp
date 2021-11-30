@@ -12,7 +12,8 @@ int FzTest::FastTest(bool man) {
 	int c, N, Nfail, ret;
 	float ref;
 	double ComSc=0, ExtSc=0;
-	bool fEx=true;
+	bool fFailOff[6], fEx=true;
+	for(int j = 0; j < 6; j++) fFailOff[j] = false;
 	
 	Init();
 	printf("\n\n");
@@ -137,6 +138,7 @@ int FzTest::FastTest(bool man) {
 			Nfail++;
 		}
 		if(abs(dcreact[c]-reacref) > 5*reacsigma) {
+			fFailOff[c] = true;
 			failmask |= FAIL_OFFSET;
 			Nfail++;
 		}
@@ -166,7 +168,7 @@ int FzTest::FastTest(bool man) {
 			ComSc += 1;
 			continue; //Skip line if ADC is broken
 		}
-		if((failmask&FAIL_OFFSET) && is_charge[c%6]) {
+		if(fFailOff[ch2c[c]] && is_charge[c%6]) {
 			ComSc += 1;
 			continue; //Skip line if a failure on DC level was already shown
 		}

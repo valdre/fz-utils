@@ -10,12 +10,15 @@
 
 int main(int argc, char *argv[]) {
 	int c, ret, tmp, blk = 0, fee = 0, dump = 0, lock = 0;
-	bool verb = false, serial = true, autom = true, shutdown = false;
+	bool verb = false, serial = true, autom = true, shutdown = false, shutdownow = false, idonly = false;
 	char *target, device[SLENG] = "", kdevice[SLENG] = "", hname[SLENG] = "regboard0", romfile[MLENG] = "";
 	
 	//Decode options
-	while((c = getopt(argc, argv, "hvmsud:n:k:b:f:r:w:")) != -1) {
+	while((c = getopt(argc, argv, "hivmSud:n:k:b:f:r:w:")) != -1) {
 		switch(c) {
+			case 'i':
+				idonly = true;
+				break;
 			case 'v':
 				verb = true;
 				break;
@@ -27,6 +30,9 @@ int main(int argc, char *argv[]) {
 				break;
 			case 's':
 				shutdown = true;
+				break;
+			case 'S':
+				shutdownow = true;
 				break;
 			case 'd':
 				if(optarg!=NULL && strlen(optarg)<SLENG) strcpy(device,optarg);
@@ -57,9 +63,11 @@ int main(int argc, char *argv[]) {
 				if(c!='h') printf(YEL "fz-test " NRM " Unrecognized option\n");
 				printf("\n**********  HELP **********\n");
 				printf("    -h         this help\n");
+				printf("    -i         FEE identification ONLY\n");
 				printf("    -v         enable verbose output\n");
 				printf("    -m         manual operation (skip automatic checks)\n");
 				printf("    -s         shutdown FEE cards at the end (only with block card connection)\n");
+				printf("    -S         shutdown FEE cards NOW (only with block card connection)\n");
 				printf("    -u         use UDP protocol (via RB) [by default direct RS232 is used]\n");
 				printf("    -d <dev>   specify the FEE serial device (used only without UDP) [default: auto]\n");
 				printf("    -n <dev>   specify the RB hostname (used only with UDP) [default: regboard0]\n");
@@ -78,6 +86,13 @@ int main(int argc, char *argv[]) {
 	else target = device;
 	FzSC sock(lock, serial, serial ? target : hname, false, blk, fee, verb);
 	if(!(sock.SockOK())) return 0;
+	
+	if(shutdownow) {
+		idonly = true;
+		shutdown = true;
+		goto ending;
+	}
+	
 	if(sock.IsBC()) {
 		//BC connection: FEE may need to be powered up
 		uint8_t reply[MLENG];
@@ -97,9 +112,9 @@ int main(int argc, char *argv[]) {
 		else printf(UP BLU "fz-test " NRM " FEEs were already powered on...          \n");
 	}
 	
-	//Open Keithley (except when dumping EEPROM)
+	//Open Keithley (except when dumping EEPROM or identifying cards)
 	FzSC *ksock=nullptr;
-	if(!dump) {
+	if((!dump) && (!idonly)) {
 		if(strlen(kdevice)<1) ksock=new FzSC(lock,true,nullptr,true);
 		else ksock=new FzSC(lock,true,kdevice,true);
 		if(ksock->SockOK()==false) {
@@ -110,6 +125,34 @@ int main(int argc, char *argv[]) {
 	
 	FzTest test(&sock,blk,fee,verb);
 	if(ksock!=nullptr) test.KeithleySetup(ksock);
+	
+	if(idonly) {
+		uint8_t reply[MLENG];
+		int sn[8], itmp[32];
+		for(int j = 0; j < 8; j++) {
+			for(int i = 0; i < 4; i++) itmp[4*j + i] = -1;
+			sn[j] = -1;
+			if(sock.Send(blk, j, 0x8B, "", reply, verb)) continue;
+			if(sscanf((char *)reply,"0|%d,%d,%d,V%d", itmp + 4*j, itmp + 4*j + 1, itmp + 4*j + 2, itmp + 4*j + 3) != 4) continue;
+			
+			if(sock.Send(blk, j, 0xA5, "Q", reply, verb) >= 0) {
+				if(sscanf((char *)reply, "0|%d", sn + j) !=1) sn[j] = -1;
+			}
+		}
+		printf(GRN "fz-test " NRM " FEE card identification for block %d...\n", blk);
+		for(int j = 0; j < 8; j++) {
+			printf("         Slot %d - ", j);
+			if(itmp[4*j] < 0) {
+				printf(RED "missing\n" NRM);
+				continue;
+			}
+			printf(" PIC vers: %02d/%02d/%04d rev %02d - SN ", itmp[4*j], itmp[4*j + 1], itmp[4*j + 2], itmp[4*j + 3]);
+			
+			if(sn[j] >= 0) printf(BLD "%03d\n" NRM, sn[j]);
+			else printf(RED " -\n" NRM);
+		}
+		goto ending;
+	}
 	
 	if(dump) {
 		if(strlen(romfile)<=0) {
@@ -142,7 +185,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	ending:
-	test.UpdateDB();
+	if((!dump) && (!idonly)) test.UpdateDB();
 	
 	if(sock.IsBC() && shutdown) {
 		uint8_t reply[MLENG];

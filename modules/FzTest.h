@@ -49,13 +49,13 @@ static const char lvnotes[19][15]= {"From VP12_0","From VP12_0","From VP5_5_IN",
 //Offset constants
 static const float blref3[6]     = {-7403,-5650,-4500,-7403,-5650,-7403};
 static const float blref5[6]     = {-7403,-5160,-5800,-7403,-4287,-7403};
-static const float bltoll[6]     = {   50,  270, 1000,   50,  280,   50};
-static const float blvtol[6]     = {   10,   25,   30,   10,   25,   25};
+static const float bltoll[6]     = {   80,  300, 1000,   80,  300,   80};
+static const float blvtol[6]     = {   10,   35,   45,   10,   35,   20};
 //DC level constants
 static const int dcref     =  675;
 static const int dcsigma   =   16;
 static const int reacref   = 2448;
-static const int reacsigma =   40;
+static const int reacsigma =   60;
 //HV constants:                 Si1     Si2
 static const int maxhv3[2] ={    200,    350};
 static const int maxhv4[2] ={    300,    400};

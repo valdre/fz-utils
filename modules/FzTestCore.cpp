@@ -246,7 +246,7 @@ int FzTest::TestAnalog() {
 	uint8_t reply[MLENG];
 	
 	tAnalog=false;
-	printf("Testing analog chains...\n");
+	printf("Testing pre-amplifiers\n");
 	
 	//Test pre-amp
 	gomask=0;
@@ -259,7 +259,8 @@ int FzTest::TestAnalog() {
 	}
 	
 	//Test baseline offset
-	for(c=0;c<12;c++) {
+	for(c=0; c<12; c++) {
+		printf(UP "Testing offsets %02d/12  \n", c+1);
 		if((ret=OffCheck(c))<0) return ret;
 	}
 	
@@ -270,7 +271,7 @@ int FzTest::TestAnalog() {
 	}
 	
 	tAnalog=true;
-	printf(UP "                                      \n" UP);
+	printf(UP "                                          \n" UP);
 	return 0;
 }
 
@@ -315,12 +316,12 @@ int FzTest::OffCheck(const int ch) {
 	//Set DAC to 200 and test BL
 	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,200);
 	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-	usleep(10000);
+	usleep(100000);
 	if((ret=BLmeas(ch,10,&max,nullptr))<0) return ret;
 	//Set DAC to 400 and test BL
 	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,400);
 	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-	usleep(10000);
+	usleep(100000);
 	if((ret=BLmeas(ch,10,&min,nullptr))<0) return ret;
 	//Set DAC to previous value
 	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,old);

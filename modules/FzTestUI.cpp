@@ -187,20 +187,20 @@ int FzTest::FastTest(bool man) {
 		}
 		else ExtSc += 1 - blvar[c] / blvtol[c%6];
 		
-		if((c%6 == 5) && (blvar[c] < 3)) {
-			failmask |= FAIL_PREAMP;
-			Nfail++;
-		}
-		if(Nfail == 0) {
-			printf(GRN "Pass" NRM);
-			ComSc += 1;
-		}
-		else {
+		if(Nfail) {
 			printf(RED "Fail" NRM);
 			fEx = false;
 		}
+		else if((c%6 == 5) && (blvar[c] / blvar[c-5] < 3)) {
+			printf(YEL "Warn" NRM);
+			ComSc += 1;
+		}
+		else {
+			printf(GRN "Pass" NRM);
+			ComSc += 1;
+		}
 		
-		printf(" % 20d % 10.0f",bl[c],ref);
+		printf(" % 20d % 10.0f Var = %5.1lf ", bl[c], ref, blvar[c]);
 		if(blvar[c]>=blvtol[c%6]) {
 			printf(" Unstable");
 			if(--Nfail) printf(" -");
@@ -209,7 +209,7 @@ int FzTest::FastTest(bool man) {
 			printf(" Bad level");
 			if(--Nfail) printf(" -");
 		}
-		if((c%6 == 5) && (blvar[c] < 3)) {
+		if((c%6 == 5) && (blvar[c] / blvar[c-5] < 3)) {
 			printf(" Bad pre-amp feedback");
 		}
 		printf("\n");
@@ -865,6 +865,7 @@ int FzTest::OffCurve() {
 			if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
 		}
 		if(!fVerb) printf(BLD "%4d" NRM,dac);
+		usleep(20000);
 		for(c=0;c<6;c++) {
 			if((ret=BLmeas(c2ch[c],10,&mes,nullptr))<0) return ret;
 			if(!fVerb) printf(" % 6d",mes);

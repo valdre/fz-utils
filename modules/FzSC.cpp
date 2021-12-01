@@ -20,6 +20,7 @@ FzSC::FzSC(int &lockmask, const bool serial, const char *target, const bool keit
 	
 	name[0] = '\0';
 	if(!serial) {
+		fBC = true;
 		fSerial = false;
 		if(keithley) printf(RED "FzSC    " NRM " Keithley only supports serial connection\n");
 		else {
@@ -335,8 +336,12 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 	//Loop for 3 query attempts
 	for(tent=0;tent<MAXAT;tent++) {
 		//Send SC query and store the time
-		if(fSerial) ret=write(sockfd,answer,N+1);
-		else ret=sendto(sockfd,(void *)answer,N,0,(struct sockaddr *)&sock_to,sizeof(struct sockaddr));
+		if(fSerial) {
+			ret=write(sockfd,answer,N+1);
+		}
+		else {
+			ret=sendto(sockfd,(void *)answer,N,0,(struct sockaddr *)&sock_to,sizeof(struct sockaddr));
+		}
 		if(ret!=(fSerial?N+1:N)) {err=-10; break;}
 		gettimeofday(&tstart,NULL);
 		M=0; err=0; j=-99;
@@ -345,8 +350,10 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 		for(;;) {
 			//Read reply message piece by piece
 			if(fSerial) ret=read(sockfd,part,MLENG);
-			else ret=recvfrom(sockfd,(void *)reply,100000,MSG_DONTWAIT,&src,&dim);
-			if(ret<0&&errno==EAGAIN) ret=0;
+			else {
+				ret=recvfrom(sockfd, (void *)part, MLENG, MSG_DONTWAIT, &src, &dim);
+			}
+			if(ret<0 && errno==EAGAIN) ret=0;
 			if(ret<0) {err=-10; break;}
 			if(ret+M>=MLENG) {err=-3; break;} //Too long answer is treated as an inconsistent reply
 			gettimeofday(&tstop,NULL);
@@ -364,7 +371,7 @@ int FzSC::Send(int blk,int fee,int cmd,const char *data,uint8_t *reply,int verb/
 			}
 			M+=ret;
 			if(j==0) {reply[M]=(uint8_t)'\0'; break;} //Message concluded
-			if(trep>=LTIME*1000) break; //TIMEOUT
+			if(trep>=LTIME*1000) {break;} //TIMEOUT
 			usleep(((int)((trep+1500)/1000))*1000-trep); //Sleep the time needed to keep a 1ms interval between two read calls
 		}
 		//Bad communication

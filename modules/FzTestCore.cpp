@@ -1107,7 +1107,7 @@ int FzTest::FullWrite(const char *filename) {
 		if((!fVerb)&&(i%10==0)) printf(UP BLD "FullWrit" NRM " writing row %3d/%3d\n",i,N);
 		ret=sscanf(row," %d %x ",&add,&cont);
 		if((ret!=2)||(add<0)||(add>lastr)) continue;
-		if((ret=WriteCell(add,cont))<0) goto err;
+		if((ret=WriteCell(add, cont, false))<0) goto err;
 	}
 	if(!fVerb) printf(UP);
 	printf(GRN "FullWrit" NRM " memory overwrited. Reboot the card to apply the changes\n");
@@ -1138,7 +1138,7 @@ int FzTest::ReadCell(const int add) {
 }
 
 //Write a cell in EEPROM
-int FzTest::WriteCell(const int add,const int cont) {
+int FzTest::WriteCell(const int add, const int cont, const bool verb) {
 	int ret;
 	char query[SLENG];
 	uint8_t reply[MLENG];
@@ -1153,7 +1153,7 @@ int FzTest::WriteCell(const int add,const int cont) {
 	}
 	sprintf(query,"%d,%d",add,cont);
 	if((ret=sock->Send(blk,fee,0x95,query,reply,fVerb))<0) return ret;
-	printf(GRN "Write   " NRM " stored 0x%02X at address %3d\n",cont,add);
+	if(verb) printf(GRN "Write   " NRM " stored 0x%02X at address %3d\n",cont,add);
 	
 	return 0;
 }

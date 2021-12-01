@@ -191,10 +191,6 @@ int FzTest::FastTest(bool man) {
 			printf(RED "Fail" NRM);
 			fEx = false;
 		}
-		else if((c%6 == 5) && (blvar[c] / blvar[c-5] < 3)) {
-			printf(YEL "Warn" NRM);
-			ComSc += 1;
-		}
 		else {
 			printf(GRN "Pass" NRM);
 			ComSc += 1;
@@ -208,9 +204,6 @@ int FzTest::FastTest(bool man) {
 		if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) {
 			printf(" Bad level");
 			if(--Nfail) printf(" -");
-		}
-		if((c%6 == 5) && (blvar[c] / blvar[c-5] < 3)) {
-			printf(" Bad pre-amp feedback");
 		}
 		printf("\n");
 	}

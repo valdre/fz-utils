@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
 	char *target, device[SLENG] = "", kdevice[SLENG] = "", hname[SLENG] = "regboard0", romfile[MLENG] = "";
 	
 	//Decode options
-	while((c = getopt(argc, argv, "hivmSud:n:k:b:f:r:w:")) != -1) {
+	while((c = getopt(argc, argv, "hivmsSud:n:k:b:f:r:w:")) != -1) {
 		switch(c) {
 			case 'i':
 				idonly = true;
@@ -98,10 +98,9 @@ int main(int argc, char *argv[]) {
 		uint8_t reply[MLENG];
 		if(sock.Send(blk, fee, 0xA5, "Q", reply, verb)) {
 			if(sock.Send(blk, 8, 0x83, "", reply, verb)) {
-				printf(RED "fz-test " NRM " FEE power on failed (Send)\n");
-				return 0;
+				printf(YEL "fz-test " NRM " No reply to FEE power on command (may be ok)\n");
 			}
-			if(strcmp((char *)reply, "0|")) {
+			else if(strcmp((char *)reply, "0|")) {
 				printf(RED "fz-test " NRM " FEE power on failed (bad reply)\n");
 				return 0;
 			}

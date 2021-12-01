@@ -12,7 +12,7 @@
 #include <time.h>
 
 //Last versions of PIC and FPGA firmwares
-#define LASTVPICV3 "28/01/2016"
+#define LASTVPICV3 "01/12/2021"
 #define LASTVPICV4 "13/03/2018"
 #define LASTVFPGA  "19/09/2019"
 //HV ramp (in V/s)
@@ -94,7 +94,7 @@ private:
 	int SetDAC(const int c, const int vset, int vprev=-1);
 	int GetDAC(const int c);
 	int ReadCell(const int add);
-	int WriteCell(const int add, const int cont);
+	int WriteCell(const int add, const int cont, const bool verb = true);
 	
 	//methods in FzTestUI.cpp:
 	int OffCal();

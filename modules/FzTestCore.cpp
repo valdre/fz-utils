@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/02/2021                          *
+*                         Simone Valdre' - 17/12/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -241,7 +241,7 @@ int FzTest::TestGeneral() {
 }
 
 int FzTest::TestAnalog() {
-	int c,N,ret;
+	int c, N, ret;
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
@@ -267,7 +267,7 @@ int FzTest::TestAnalog() {
 	// ADC status
 	adcmask=0;
 	for(c=0;c<6;c++) {
-		if((((gomask)&(1<<c))>>c)==0 && blvar[c2ch[c]] < 0.1) adcmask|=(1<<c);
+		if((((gomask)&(1<<c))>>c)==0 && blvar[c2ch[c]] < 0.1 && bl[c2ch[c]]>=-8100 && bl[c2ch[c]]<=8100) adcmask|=(1<<c);
 	}
 	
 	tAnalog=true;
@@ -299,35 +299,35 @@ int FzTest::SetSN(const int SN) {
 //Offset check and calibration functions
 //Offset check routine
 int FzTest::OffCheck(const int ch) {
-	int c,ret=0;
-	int old,min,max;
+	int c, ret = 0;
+	int old, min, max;
 	char query[SLENG];
 	uint8_t reply[MLENG];
 	
-	if((ret=BLmeas(ch, 20, bl+ch, blvar+ch))<0) return ret;
+	if((ret = BLmeas(ch, 20, bl+ch, blvar+ch))<0) return ret;
 	if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) return 0;
 	
-	c=ch2c[ch];
+	c = ch2c[ch];
 	//Store present DAC value
-	sprintf(query,"%s,%d",lFPGA[c/3],(c%3)+4);
-	if((ret=sock->Send(blk,fee,0x85,query,reply,fVerb))) return ret;
-	ret=sscanf((char *)reply,"0|%d",&old);
-	if(ret!=1) return -20;
+	sprintf(query, "%s,%d", lFPGA[c/3], (c%3) + 4);
+	if((ret = sock->Send(blk, fee, 0x85, query, reply, fVerb))) return ret;
+	ret = sscanf((char *)reply, "0|%d", &old);
+	if(ret != 1) return -20;
 	//Set DAC to 200 and test BL
-	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,200);
-	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
+	sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, 200);
+	if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
 	usleep(100000);
-	if((ret=BLmeas(ch,10,&max,nullptr))<0) return ret;
+	if((ret = BLmeas(ch, 10, &max, nullptr))<0) return ret;
 	//Set DAC to 400 and test BL
-	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,400);
-	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
+	sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, 400);
+	if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
 	usleep(100000);
-	if((ret=BLmeas(ch,10,&min,nullptr))<0) return ret;
+	if((ret = BLmeas(ch, 10, &min, nullptr)) < 0) return ret;
 	//Set DAC to previous value
-	sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,old);
-	if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-	dacoff[c]=old;
-	dcreact[c]=max-min;
+	sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, old);
+	if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
+	dacoff[c] = old;
+	dcreact[c] = max - min;
 	return 0;
 }
 

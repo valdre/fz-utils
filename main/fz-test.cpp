@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/02/2021                          *
+*                         Simone Valdre' - 17/12/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -12,6 +12,7 @@ int main(int argc, char *argv[]) {
 	int c, ret, tmp, blk = 0, fee = 0, dump = 0, lock = 0;
 	bool verb = false, serial = true, autom = true, shutdown = false, shutdownow = false, idonly = false;
 	char *target, device[SLENG] = "", kdevice[SLENG] = "", hname[SLENG] = "regboard0", romfile[MLENG] = "";
+	uint8_t reply[MLENG];
 	
 	//Decode options
 	while((c = getopt(argc, argv, "hivmsSud:n:k:b:f:r:w:")) != -1) {
@@ -95,20 +96,30 @@ int main(int argc, char *argv[]) {
 	
 	if(sock.IsBC()) {
 		//BC connection: FEE may need to be powered up
-		uint8_t reply[MLENG];
-		if(sock.Send(blk, fee, 0xA5, "Q", reply, verb)) {
+		if(sock.Send(blk, fee, 0x83, "", reply, verb)) {
 			if(sock.Send(blk, 8, 0x83, "", reply, verb)) {
 				printf(YEL "fz-test " NRM " No reply to FEE power on command (may be ok)\n");
 			}
 			else if(strcmp((char *)reply, "0|")) {
 				printf(RED "fz-test " NRM " FEE power on failed (bad reply)\n");
-				return 0;
+				idonly = true;
+				goto ending;
 			}
 			printf(BLD "fz-test " NRM " Waiting 15s for power on...\n");
 			sleep(15);
 			printf(UP GRN "fz-test " NRM " FEEs powered on...          \n");
 		}
 		else printf(UP BLU "fz-test " NRM " FEEs were already powered on...          \n");
+	}
+	
+	if((ret = sock.Send(blk, fee, 0x83, "", reply, verb))) {
+		idonly = true;
+		goto err;
+	}
+	if(sock.Send(blk, fee, 0xA5, "", reply, verb)) {
+		printf(RED "fz-test " NRM " PIC version (<2016) is not supported. Please update the firmware!\n");
+		idonly = true;
+		goto ending;
 	}
 	
 	//Open Keithley (except when dumping EEPROM or identifying cards)

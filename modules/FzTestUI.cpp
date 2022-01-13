@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 16/03/2021                          *
+*                         Simone Valdre' - 17/12/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -133,11 +133,11 @@ int FzTest::FastTest(bool man) {
 		}
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
 		Nfail=0;
-		if(abs(dacoff[c]-dcref) > 5*dcsigma) {
+		if(abs(dacoff[c]-dcref) > dcvar) {
 			failmask |= FAIL_DC;
 			Nfail++;
 		}
-		if(abs(dcreact[c]-reacref) > 5*reacsigma) {
+		if(abs(dcreact[c]-reacref) > reacvar) {
 			fFailOff[c] = true;
 			failmask |= FAIL_OFFSET;
 			Nfail++;
@@ -151,12 +151,12 @@ int FzTest::FastTest(bool man) {
 			fEx = false;
 		}
 		
-		printf(" % 20d % 10d",dacoff[c],dcref);
-		if(abs(dcreact[c]-reacref) > 5*reacsigma) {
+		printf(" % 20d % 10d", dacoff[c], dcref);
+		if(abs(dcreact[c]-reacref) > reacvar) {
 			printf(" Bad reaction");
 			if(--Nfail) printf(" -");
 		}
-		if(abs(dacoff[c]-dcref) > 5*dcsigma) printf(" Bad level");
+		if(abs(dacoff[c]-dcref) > dcvar) printf(" Bad level");
 		printf("\n");
 	}
 	
@@ -173,7 +173,8 @@ int FzTest::FastTest(bool man) {
 			continue; //Skip line if a failure on DC level was already shown
 		}
 		
-		printf("               %s-%s ",lADC[c%6],lFPGA[c/6]);ref=(v4)?blref5[c%6]:blref3[c%6];
+		printf("               %s-%s ", lADC[c%6], lFPGA[c/6]);
+		ref = v4 ? blref5[c%6] : blref3[c%6];
 		Nfail=0;
 		if(fabs(ref-(double)(bl[c])) >= bltoll[c%6]) {
 			failmask |= FAIL_OFFSET;
@@ -514,12 +515,13 @@ int FzTest::HVTest() {
 	}
 	
 	//Test current
-	printf("\nTest all channels simultaneously with 100 MOhm loads (HV will be applyed) [Y/n]> ");
+	printf("\nTest all channels with 100 MOhm loads (HV will be applyed), s = skip all [Y/n/s]> ");
 	ret=getchar();
 	if(ret!='\n') {
 		for(;getchar()!='\n';);
 	}
 	if(ret=='\n' || ret=='y' || ret=='Y') sim=true;
+	if(ret=='s' || ret=='S') goto skip;
 	
 	if(sim) {
 		//Apply 110V
@@ -550,6 +552,7 @@ int FzTest::HVTest() {
 		}
 	}
 	
+	skip:
 	printf("\n\n");
 	printf(BLD "                         **************************************************\n");
 	printf("                         *                 HV TEST REPORT                 *\n");

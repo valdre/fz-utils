@@ -1,6 +1,6 @@
 /*******************************************************************************
 *                                                                              *
-*                         Simone Valdre' - 22/02/2021                          *
+*                         Simone Valdre' - 17/12/2021                          *
 *                  distributed under GPL-3.0-or-later licence                  *
 *                                                                              *
 *******************************************************************************/
@@ -47,15 +47,15 @@ static const char lvlabel[19][50]= {Mag "      VP5REFA - M121" NRM,Mag "      VP
 static const float vref[19]      = {5000,5000,2500,2000,2000,2000,2000,3700,3000,3000,3000,3000,3300,3300,2500,1000,1800,1800,1800};
 static const char lvnotes[19][15]= {"From VP12_0","From VP12_0","From VP5_5_IN","From VM27","From VM27","From VM27","From VM27","From VP5_5_IN","From VP37","From VP37","From VP37","From VP37","From VP37","From VP37","From VP5_5_IN","From VP25","From VP25","From VP25","From VP25"};
 //Offset constants
-static const float blref3[6]     = {-7403,-5650,-4500,-7403,-5650,-7403};
-static const float blref5[6]     = {-7403,-5160,-5800,-7403,-4287,-7403};
-static const float bltoll[6]     = {  100,  300, 1000,  100,  300,  100};
+static const float blref3[6]     = {-7400,-5500,-4500,-7400,-5500,-7400};
+static const float blref5[6]     = {-7400,-5000,-5800,-7400,-4500,-7400};
+static const float bltoll[6]     = {  100,  500, 1000,  100,  500,  100};
 static const float blvtol[6]     = {   20,   50,   60,   20,   50,   30};
 //DC level constants
-static const int dcref     =  675;
-static const int dcsigma   =   16;
-static const int reacref   = 2448;
-static const int reacsigma =   60;
+static const int dcref   =  700;
+static const int dcvar   =  100;
+static const int reacref = 2500;
+static const int reacvar =  500;
 //HV constants:                 Si1     Si2
 static const int maxhv3[2] ={    200,    350};
 static const int maxhv4[2] ={    300,    400};

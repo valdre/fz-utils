@@ -60,6 +60,7 @@ void FzTest::Init() {
 	for(c=0;c<12;c++) {bl[c]=-10000; blvar[c]=-10000;}
 	for(c=0;c<6;c++) {
 		dacoff[c]=-1; dcreact[c]=-1;
+		adcbits[c]=0;
 		for(int i=0;i<103;i++) offmatrix[c][i]=-1;
 	}
 	hvmask=-1;
@@ -267,7 +268,8 @@ int FzTest::TestAnalog() {
 	// ADC status
 	adcmask=0;
 	for(c=0;c<6;c++) {
-		if((((gomask)&(1<<c))>>c)==0 && blvar[c2ch[c]] < 0.1 && bl[c2ch[c]]>=-8100 && bl[c2ch[c]]<=8100) adcmask|=(1<<c);
+		if(blvar[c2ch[c]] < 0.1 && bl[c2ch[c]]>=-8100 && bl[c2ch[c]]<=8100) adcmask|=(1<<c);
+		if(adcbits[c] != 16383) adcmask|=(1<<c);
 	}
 	
 	tAnalog=true;
@@ -297,16 +299,21 @@ int FzTest::SetSN(const int SN) {
 //c  goes from 0 to 5  (QH1,Q2,Q3 x2)
 
 //Offset check and calibration functions
-//Offset check routine
+//Offset and ADC check routine
 int FzTest::OffCheck(const int ch) {
 	int c, ret = 0;
 	int old, min, max;
 	char query[SLENG];
 	uint8_t reply[MLENG];
+	const double testval[20] = {8, 4, 2, 1, 0, -1, -2, -3, -5, -9, -17, -33, -65, -129, -257, -513, -1025, -2049, -4097, -8192};
+	int dac, base, bitup = 0, bitdn = -1;
+	double m, q;
 	
+	//Check baseline and sigma baseline (all channels)
 	if((ret = BLmeas(ch, 20, bl+ch, blvar+ch))<0) return ret;
 	if(ch==1 || ch==2 || ch==4 || ch==7 || ch==8 || ch==10) return 0;
 	
+	//Check DAC offset and ADC readings (100MHz channels only)
 	c = ch2c[ch];
 	//Store present DAC value
 	sprintf(query, "%s,%d", lFPGA[c/3], (c%3) + 4);
@@ -316,18 +323,36 @@ int FzTest::OffCheck(const int ch) {
 	//Set DAC to 200 and test BL
 	sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, 200);
 	if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-	usleep(100000);
+	usleep(80000);
 	if((ret = BLmeas(ch, 10, &max, nullptr))<0) return ret;
 	//Set DAC to 400 and test BL
 	sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, 400);
 	if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-	usleep(100000);
+	usleep(80000);
 	if((ret = BLmeas(ch, 10, &min, nullptr)) < 0) return ret;
+	dacoff[c] = old;
+	dcreact[c] = max - min;
+	adcbits[c] = 16383;
+	if(max > 8100 || max < -8100) goto offerr;
+	if(min > 8100 || min < -8100) goto offerr;
+	if(abs(dcreact[c] - reacref) > reacvar) goto offerr;
+	m = ((double)(min - max)) / 200.;
+	q = (double)(2 * max - min);
+	for(int j = 0; j < 20; j++) {
+		dac = (testval[j] - q) / m;
+		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, dac);
+		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
+		usleep(80000);
+		if((ret = BLmeas(ch, 1, &base, nullptr))<0) return ret;
+		bitup |= base; bitdn &= base;
+		if(abs(base - (int)(testval[j])) > 100) goto offerr;
+	}
+	adcbits[c] = (bitup & (~bitdn)) & 16383;
+	
+	offerr:
 	//Set DAC to previous value
 	sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, old);
 	if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-	dacoff[c] = old;
-	dcreact[c] = max - min;
 	return 0;
 }
 

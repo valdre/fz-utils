@@ -102,24 +102,35 @@ int FzTest::FastTest(bool man) {
 	//Analog chain test (Pre-Amp, DC offsets and ADCs)
 	if((ret=TestAnalog())<0) return ret;
 	
-	// Pre-amp Go/NoGo test
-	printf(BLD "\nPre-amplifiers Go / NOGo test:\n" NRM);
-	ComSc -= 2;
+	// ADC and Pre-amp Go/NoGo test
+	printf(BLD "\nADC working bits and pre-amplifiers Go / NOGo test:\n" NRM);
+	ComSc -= 4;
 	for(c=0; c<6; c++) {
-		if(adcmask&(1<<c)) {
-			ComSc += 2;
-			continue; //Skip line if ADC is broken
-		}
 		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
-		if((gomask&(1<<c))==0) {
+		if(adcmask&(1<<c)) {
+			failmask|=FAIL_ADC;
+			printf(RED "Fail" NRM);
+			fEx = false;
+		}
+		else if((gomask&(1<<c))==0) {
 			failmask|=FAIL_PREAMP;
 			printf(RED "Fail" NRM);
 			fEx = false;
 		}
 		else {
 			printf(GRN "Pass" NRM);
-			ComSc += 2;
+			ComSc += 4;
 		}
+		for(int i=13; i>=0; i--) {
+			if(i%2) printf(" ");
+			printf("%d", (adcbits[c]>>i)&1);
+		}
+		printf("           ");
+		if(adcmask&(1<<c)) {
+			if(adcbits[c] == 16383) printf(" ADC S/H failure");
+			else printf(" Some ADC bits hanged");
+		}
+		else if((gomask&(1<<c))==0) printf(" Pre-amp failure");
 		printf("\n");
 	}
 	
@@ -205,23 +216,6 @@ int FzTest::FastTest(bool man) {
 		if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) {
 			printf(" Bad level");
 			if(--Nfail) printf(" -");
-		}
-		printf("\n");
-	}
-	
-	//ADC
-	printf(BLD "\n100MHz ADCs status:\n" NRM);
-	ComSc -= 2;
-	for(c=0;c<6;c++) {
-		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
-		if(adcmask&(1<<c)) {
-			failmask|=FAIL_ADC;
-			printf(RED "Fail" NRM);
-			fEx = false;
-		}
-		else {
-			printf(GRN "Pass" NRM);
-			ComSc += 2;
 		}
 		printf("\n");
 	}
@@ -762,12 +756,12 @@ int FzTest::OffCal() {
 		//Try DAC=200 and check bl
 		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac1);
 		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-		usleep(10000);
+		usleep(80000);
 		if((ret = BLmeas(ch, 20, &bl1, nullptr)) < 0) return ret;
 		//Try DAC=400 and check bl
 		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac2);
 		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-		usleep(10000);
+		usleep(80000);
 		if((ret = BLmeas(ch, 20, bl+ch, blvar+ch))<0) return ret;
 		bl2 = bl[ch];
 		dcreact[c] = bl1 - bl2;
@@ -804,7 +798,7 @@ int FzTest::OffCal() {
 			
 			sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac);
 			if((ret=sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-			usleep(10000);
+			usleep(80000);
 			if((ret = BLmeas(ch, 10, &Bl, nullptr)) < 0) return ret;
 			
 			if(target < bl2) {bl1=Bl; dac1=dac;}
@@ -825,7 +819,7 @@ int FzTest::OffCal() {
 		ch = c2ch[c];
 		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, finaldac[c]);
 		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-		usleep(10000);
+		usleep(80000);
 		if((ret = BLmeas(ch, 10, &Bl, nullptr)) < 0) return ret;
 		printf(GRN "OffCal  " NRM " %s-%s: DAC set to %4d. BL -> % 5d\n", lADC[ch%6], lFPGA[ch/6], finaldac[c], (Bl<32768)?Bl:(Bl-65536));
 	}
@@ -921,7 +915,7 @@ int FzTest::OffManual() {
 		}
 		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,dac);
 		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-		usleep(1000);
+		usleep(80000);
 		if((ret=BLmeas(ch,1,&base,nullptr))<0) return ret;
 		if(ch==0 || ch==6) {
 			if((ret=BLmeas(ch+2,1,&basel,nullptr))<0) return ret;

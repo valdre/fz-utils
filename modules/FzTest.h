@@ -112,7 +112,7 @@ private:
 	int blk,fee;
 	
 	//FEE data
-	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],dacoff[6],dcreact[6],offmatrix[6][103],hvmask,V20[4],Vfull[4],Ifull[4],I1000[4];
+	int v4,sn,temp[6],lv[19],gomask,adcmask,bl[12],adcbits[6],dacoff[6],dcreact[6],offmatrix[6][103],hvmask,V20[4],Vfull[4],Ifull[4],I1000[4];
 	char vPIC[11],vFPGA[2][11];
 	double Score, HVScore, blvar[12], V20var[4],Vfullvar[4],Vkei[4][41],Vdac[4][41],Vadc[4][41],Iadc[4][41],Vp0[4],Vp1[4],Ip0[4],Ip1[4];
 	int failmask,tcal[4];

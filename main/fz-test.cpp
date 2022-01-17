@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) {
 		idonly = true;
 		goto err;
 	}
-	if(sock.Send(blk, fee, 0xA5, "", reply, verb)) {
+	if(sock.Send(blk, fee, 0xA5, "Q", reply, verb)) {
 		printf(RED "fz-test " NRM " PIC version (<2016) is not supported. Please update the firmware!\n");
 		idonly = true;
 		goto ending;

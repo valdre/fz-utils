@@ -305,7 +305,7 @@ int FzTest::OffCheck(const int ch) {
 	int old, min, max;
 	char query[SLENG];
 	uint8_t reply[MLENG];
-	const double testval[20] = {8, 4, 2, 1, 0, -1, -2, -3, -5, -9, -17, -33, -65, -129, -257, -513, -1025, -2049, -4097, -8192};
+	const double testval[10] = {248, 121, 60, 31, 0, -1, -32, -61, -122, -249};
 	int dac, base, bitup = 0, bitdn = -1;
 	double m, q;
 	
@@ -323,12 +323,12 @@ int FzTest::OffCheck(const int ch) {
 	//Set DAC to 200 and test BL
 	sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, 200);
 	if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-	usleep(80000);
+	usleep(100000);
 	if((ret = BLmeas(ch, 10, &max, nullptr))<0) return ret;
 	//Set DAC to 400 and test BL
 	sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, 400);
 	if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-	usleep(80000);
+	usleep(100000);
 	if((ret = BLmeas(ch, 10, &min, nullptr)) < 0) return ret;
 	dacoff[c] = old;
 	dcreact[c] = max - min;
@@ -338,11 +338,13 @@ int FzTest::OffCheck(const int ch) {
 	if(abs(dcreact[c] - reacref) > reacvar) goto offerr;
 	m = ((double)(min - max)) / 200.;
 	q = (double)(2 * max - min);
-	for(int j = 0; j < 20; j++) {
+	for(int j = 0; j < 10; j++) {
 		dac = (testval[j] - q) / m;
+		if(dac < 0) dac = 0;
+		if(dac > 1023) dac = 1023;
 		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3) + 1, dac);
 		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-		usleep(80000);
+		usleep(100000);
 		if((ret = BLmeas(ch, 1, &base, nullptr))<0) return ret;
 		bitup |= base; bitdn &= base;
 		if(abs(base - (int)(testval[j])) > 100) goto offerr;

@@ -756,12 +756,12 @@ int FzTest::OffCal() {
 		//Try DAC=200 and check bl
 		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac1);
 		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-		usleep(80000);
+		usleep(100000);
 		if((ret = BLmeas(ch, 20, &bl1, nullptr)) < 0) return ret;
 		//Try DAC=400 and check bl
 		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac2);
 		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-		usleep(80000);
+		usleep(100000);
 		if((ret = BLmeas(ch, 20, bl+ch, blvar+ch))<0) return ret;
 		bl2 = bl[ch];
 		dcreact[c] = bl1 - bl2;
@@ -798,7 +798,7 @@ int FzTest::OffCal() {
 			
 			sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, dac);
 			if((ret=sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-			usleep(80000);
+			usleep(100000);
 			if((ret = BLmeas(ch, 10, &Bl, nullptr)) < 0) return ret;
 			
 			if(target < bl2) {bl1=Bl; dac1=dac;}
@@ -819,7 +819,7 @@ int FzTest::OffCal() {
 		ch = c2ch[c];
 		sprintf(query, "%s,%d,%d", lFPGA[c/3], (c%3)+1, finaldac[c]);
 		if((ret = sock->Send(blk, fee, 0x89, query, reply, fVerb))) return ret;
-		usleep(80000);
+		usleep(100000);
 		if((ret = BLmeas(ch, 10, &Bl, nullptr)) < 0) return ret;
 		printf(GRN "OffCal  " NRM " %s-%s: DAC set to %4d. BL -> % 5d\n", lADC[ch%6], lFPGA[ch/6], finaldac[c], (Bl<32768)?Bl:(Bl-65536));
 	}
@@ -915,7 +915,7 @@ int FzTest::OffManual() {
 		}
 		sprintf(query,"%s,%d,%d",lFPGA[c/3],(c%3)+1,dac);
 		if((ret=sock->Send(blk,fee,0x89,query,reply,fVerb))) return ret;
-		usleep(80000);
+		usleep(100000);
 		if((ret=BLmeas(ch,1,&base,nullptr))<0) return ret;
 		if(ch==0 || ch==6) {
 			if((ret=BLmeas(ch+2,1,&basel,nullptr))<0) return ret;

@@ -573,7 +573,7 @@ int FzTest::HVCalChan(const int c,const int max,const bool dac) {
 			cBV = (int64_t)(p0*1.e7);
 		}
 		sgV=1;
-		if((cBV>=(1L<<31))||(cBV<-(1L<<31))) {
+		if((cBV>=(1LL<<31))||(cBV<-(1LL<<31))) {
 			printf(YEL "HVCalib " NRM " V coeff B is outside boundaries\n");
 			return 0;
 		}
@@ -588,11 +588,11 @@ int FzTest::HVCalChan(const int c,const int max,const bool dac) {
 	cAI = (uint64_t)(p1*1.e3);
 	cBI = labs((int64_t)p0);
 	sgI = (p0>=0) ? 1 : 0;
-	if(cAI>=(1L<<32)) {
+	if(cAI>=(1LL<<32)) {
 		printf(YEL "HVCalib " NRM " I coeff A is outside boundaries\n");
 		return 0;
 	}
-	if(cBI>=(1L<<32)) {
+	if(cBI>=(1LL<<32)) {
 		printf(YEL "HVCalib " NRM " I coeff B is outside boundaries\n");
 		return 0;
 	}

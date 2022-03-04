@@ -548,15 +548,15 @@ int FzTest::HVCalChan(const int c,const int max,const bool dac) {
 	
 	//Computing linear fit coefficients and check limits
 	double ii[41],p0,p1;
-	long int cAV,cBV,cBI;
-	unsigned long int cAI;
+	int64_t cAV,cBV,cBI;
+	uint64_t cAI;
 	int sgI,sgV;
 	
 	for(i=0;i<41;i++) ii[i]=(double)i;
 	if((ret=LinReg(N,Vadc[c],ii,&p1,&p0))<0) return 0;
 	if(v4) {
-		cAV = (long int)(p1*1.e7);
-		cBV = labs((long int)(p0*1.e7));
+		cAV = (int64_t)(p1*1.e7);
+		cBV = labs((int64_t)(p0*1.e7));
 		sgV = (p0>=0) ? 1 : 0;
 		if(cBV>=(1<<24)) {
 			printf(YEL "HVCalib " NRM " V coeff B is outside boundaries\n");
@@ -565,12 +565,12 @@ int FzTest::HVCalChan(const int c,const int max,const bool dac) {
 	}
 	else {
 		if((c%2)==0) {
-			cAV = (long int)(-p1*1.e8);
-			cBV = (long int)(p0*1.e8);
+			cAV = (int64_t)(-p1*1.e8);
+			cBV = (int64_t)(p0*1.e8);
 		}
 		else {
-			cAV = (long int)(-p1*1.e7);
-			cBV = (long int)(p0*1.e7);
+			cAV = (int64_t)(-p1*1.e7);
+			cBV = (int64_t)(p0*1.e7);
 		}
 		sgV=1;
 		if((cBV>=(1L<<31))||(cBV<-(1L<<31))) {
@@ -585,8 +585,8 @@ int FzTest::HVCalChan(const int c,const int max,const bool dac) {
 	Vp0[c]=-p0/p1; Vp1[c]=1./(10.*p1);
 	
 	if((ret=LinReg(N,ii,Iadc[c],&p1,&p0))<0) return 0;
-	cAI = (unsigned long int)(p1*1.e3);
-	cBI = labs((long int)p0);
+	cAI = (uint64_t)(p1*1.e3);
+	cBI = labs((int64_t)p0);
 	sgI = (p0>=0) ? 1 : 0;
 	if(cAI>=(1L<<32)) {
 		printf(YEL "HVCalib " NRM " I coeff A is outside boundaries\n");

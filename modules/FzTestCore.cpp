@@ -305,7 +305,7 @@ int FzTest::OffCheck(const int ch) {
 	int old, min, max;
 	char query[SLENG];
 	uint8_t reply[MLENG];
-	const double testval[10] = {248, 121, 60, 31, 0, -1, -32, -61, -122, -249};
+	const double testval[10] = {121, 60, 31, 12, 0, -1, -13, -32, -61, -122};
 	int dac, base, bitup = 0, bitdn = -1;
 	double m, q;
 	

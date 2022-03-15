@@ -12,7 +12,7 @@ int FzTest::FastTest(bool man) {
 	int c, N, Nfail, ret;
 	float ref;
 	double ComSc=0, ExtSc=0;
-	bool fFailOff[6], fEx=true;
+	bool fFailOff[6], fEx = true, fRegDC = false;
 	for(int j = 0; j < 6; j++) fFailOff[j] = false;
 	
 	Init();
@@ -189,6 +189,7 @@ int FzTest::FastTest(bool man) {
 		Nfail=0;
 		if(fabs(ref-(double)(bl[c])) >= bltoll[c%6]) {
 			failmask |= FAIL_OFFSET;
+			fRegDC = true;
 			Nfail++;
 		}
 		else ExtSc += 1 - fabs(ref-(double)(bl[c])) / bltoll[c%6];
@@ -334,7 +335,7 @@ int FzTest::FastTest(bool man) {
 			ret-=0x30;
 			if(ret!=1) return 0;
 		}
-		if(failmask&FAIL_DC) {
+		if((failmask&FAIL_DC) || fRegDC) {
 			printf("\nSome offsets are not regulated. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    2) Auto-calibrate DC levels\n");
@@ -353,7 +354,7 @@ int FzTest::FastTest(bool man) {
 				if((ret=OffCal())<0) return ret;
 			}
 		}
-		if(failmask&FAIL_OFFSET) {
+		if((failmask&FAIL_OFFSET) && (!fRegDC)) {
 			printf("\nSome offsets are unstable or out of range. What do you want to do?\n");
 			printf("    1) Ignore and go on\n");
 			printf("    2) Run a DAC-offset curve test\n");

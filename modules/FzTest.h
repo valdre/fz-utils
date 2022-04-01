@@ -71,7 +71,7 @@ public:
 	int FullWrite(const char *filename);
 	
 	//methods in FzTestUI.cpp:
-	int FastTest(bool man=false);
+	int FastTest(bool man=false, bool off=true);
 	int Manual();
 	void UpdateDB();
 	

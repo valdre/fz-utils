@@ -10,15 +10,18 @@
 
 int main(int argc, char *argv[]) {
 	int c, ret, tmp, blk = 0, fee = 0, dump = 0, lock = 0;
-	bool verb = false, serial = true, autom = true, shutdown = false, shutdownow = false, idonly = false;
+	bool verb = false, serial = true, autom = true, shutdown = false, shutdownow = false, idonly = false, genonly = false;
 	char *target, device[SLENG] = "", kdevice[SLENG] = "", hname[SLENG] = "regboard0", romfile[MLENG] = "";
 	uint8_t reply[MLENG];
 	
 	//Decode options
-	while((c = getopt(argc, argv, "hivmsSud:n:k:b:f:r:w:")) != -1) {
+	while((c = getopt(argc, argv, "higvmsSud:n:k:b:f:r:w:")) != -1) {
 		switch(c) {
 			case 'i':
 				idonly = true;
+				break;
+			case 'g':
+				genonly = true;
 				break;
 			case 'v':
 				verb = true;
@@ -65,6 +68,7 @@ int main(int argc, char *argv[]) {
 				printf("\n**********  HELP **********\n");
 				printf("    -h         this help\n");
 				printf("    -i         FEE identification ONLY\n");
+				printf("    -g         generic test ONLY\n");
 				printf("    -v         enable verbose output\n");
 				printf("    -m         manual operation (skip automatic checks)\n");
 				printf("    -s         shutdown FEE cards at the end (only with block card connection)\n");
@@ -124,7 +128,7 @@ int main(int argc, char *argv[]) {
 	
 	//Open Keithley (except when dumping EEPROM or identifying cards)
 	FzSC *ksock=nullptr;
-	if((!dump) && (!idonly)) {
+	if((!dump) && (!idonly) && (!genonly)) {
 		if(strlen(kdevice)<1) ksock=new FzSC(lock,true,nullptr,true);
 		else ksock=new FzSC(lock,true,kdevice,true);
 		if(ksock->SockOK()==false) {
@@ -177,7 +181,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	else if(autom) {
-		if((ret=test.FastTest())<0) goto err;
+		if((ret=test.FastTest(genonly, !genonly))<0) goto err;
 	}
 	else {
 		if((ret=test.Manual())<0) goto err;

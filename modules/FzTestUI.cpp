@@ -8,7 +8,7 @@
 #include "FzTest.h"
 
 //Fast test routine
-int FzTest::FastTest(bool man) {
+int FzTest::FastTest(bool man, bool off) {
 	int c, N, Nfail, ret;
 	float ref;
 	double ComSc=0, ExtSc=0;
@@ -99,126 +99,128 @@ int FzTest::FastTest(bool man) {
 		printf(" %20d %10.0f %s\n", lv[c], vref[c], lvnotes[c]);
 	}
 	
-	//Analog chain test (Pre-Amp, DC offsets and ADCs)
-	if((ret=TestAnalog())<0) return ret;
-	
-	// ADC and Pre-amp Go/NoGo test
-	printf(BLD "\nADC working bits and pre-amplifiers Go / NOGo test:\n" NRM);
-	ComSc -= 4;
-	for(c=0; c<6; c++) {
-		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
-		if(adcmask&(1<<c)) {
-			failmask|=FAIL_ADC;
-			printf(RED "Fail" NRM);
-			fEx = false;
-		}
-		else if((gomask&(1<<c))==0) {
-			failmask|=FAIL_PREAMP;
-			printf(RED "Fail" NRM);
-			fEx = false;
-		}
-		else {
-			printf(GRN "Pass" NRM);
-			ComSc += 4;
-		}
-		for(int i=13; i>=0; i--) {
-			if(i%2) printf(" ");
-			printf("%d", (adcbits[c]>>i)&1);
-		}
-		printf("           ");
-		if(adcmask&(1<<c)) {
-			if(adcbits[c] == 16383) printf(" ADC S/H failure");
-			else printf(" Some ADC bits hanged");
-		}
-		else if((gomask&(1<<c))==0) printf(" Pre-amp failure");
-		printf("\n");
-	}
-	
-	//Baseline DC level
-	printf(BLD "\nBaseline DC level (in DAC units):\n" NRM);
-	ComSc -= 2;
-	for(c=0;c<6;c++) {
-		if(adcmask&(1<<c)) {
-			ComSc += 2;
-			continue; //Skip line if ADC is broken
-		}
-		printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
-		Nfail=0;
-		if(abs(dacoff[c]-dcref) > dcvar) {
-			failmask |= FAIL_DC;
-			Nfail++;
-		}
-		if(abs(dcreact[c]-reacref) > reacvar) {
-			fFailOff[c] = true;
-			failmask |= FAIL_OFFSET;
-			Nfail++;
-		}
-		if(Nfail == 0) {
-			printf(GRN "Pass" NRM);
-			ComSc += 2;
-		}
-		else {
-			printf(RED "Fail" NRM);
-			fEx = false;
+	if(off) {
+		//Analog chain test (Pre-Amp, DC offsets and ADCs)
+		if((ret=TestAnalog())<0) return ret;
+		
+		// ADC and Pre-amp Go/NoGo test
+		printf(BLD "\nADC working bits and pre-amplifiers Go / NOGo test:\n" NRM);
+		ComSc -= 4;
+		for(c=0; c<6; c++) {
+			printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
+			if(adcmask&(1<<c)) {
+				failmask|=FAIL_ADC;
+				printf(RED "Fail" NRM);
+				fEx = false;
+			}
+			else if((gomask&(1<<c))==0) {
+				failmask|=FAIL_PREAMP;
+				printf(RED "Fail" NRM);
+				fEx = false;
+			}
+			else {
+				printf(GRN "Pass" NRM);
+				ComSc += 4;
+			}
+			for(int i=13; i>=0; i--) {
+				if(i%2) printf(" ");
+				printf("%d", (adcbits[c]>>i)&1);
+			}
+			printf("           ");
+			if(adcmask&(1<<c)) {
+				if(adcbits[c] == 16383) printf(" ADC S/H failure");
+				else printf(" Some ADC bits hanged");
+			}
+			else if((gomask&(1<<c))==0) printf(" Pre-amp failure");
+			printf("\n");
 		}
 		
-		printf(" % 20d % 10d", dacoff[c], dcref);
-		if(abs(dcreact[c]-reacref) > reacvar) {
-			printf(" Bad reaction");
-			if(--Nfail) printf(" -");
-		}
-		if(abs(dacoff[c]-dcref) > dcvar) printf(" Bad level");
-		printf("\n");
-	}
-	
-	//Baseline offsets
-	printf(BLD "\nBaseline offsets (in ADC units):\n" NRM);
-	ComSc -= 2; ExtSc += 16;
-	for(c=0;c<12;c++) {
-		if(adcmask&(1<<ch2c[c]) && is_charge[c%6]) {
-			ComSc += 1;
-			continue; //Skip line if ADC is broken
-		}
-		if(fFailOff[ch2c[c]] && is_charge[c%6]) {
-			ComSc += 1;
-			continue; //Skip line if a failure on DC level was already shown
-		}
-		
-		printf("               %s-%s ", lADC[c%6], lFPGA[c/6]);
-		ref = v4 ? blref5[c%6] : blref3[c%6];
-		Nfail=0;
-		if(fabs(ref-(double)(bl[c])) >= bltoll[c%6]) {
-			failmask |= FAIL_OFFSET;
-			fRegDC = true;
-			Nfail++;
-		}
-		else ExtSc += 1 - fabs(ref-(double)(bl[c])) / bltoll[c%6];
-		
-		if(blvar[c] >= blvtol[c%6]) {
-			failmask |= FAIL_OFFSET;
-			Nfail++;
-		}
-		else ExtSc += 1 - blvar[c] / blvtol[c%6];
-		
-		if(Nfail) {
-			printf(RED "Fail" NRM);
-			fEx = false;
-		}
-		else {
-			printf(GRN "Pass" NRM);
-			ComSc += 1;
+		//Baseline DC level
+		printf(BLD "\nBaseline DC level (in DAC units):\n" NRM);
+		ComSc -= 2;
+		for(c=0;c<6;c++) {
+			if(adcmask&(1<<c)) {
+				ComSc += 2;
+				continue; //Skip line if ADC is broken
+			}
+			printf("               %s-%s ",lChan[c%3],lFPGA[c/3]);
+			Nfail=0;
+			if(abs(dacoff[c]-dcref) > dcvar) {
+				failmask |= FAIL_DC;
+				Nfail++;
+			}
+			if(abs(dcreact[c]-reacref) > reacvar) {
+				fFailOff[c] = true;
+				failmask |= FAIL_OFFSET;
+				Nfail++;
+			}
+			if(Nfail == 0) {
+				printf(GRN "Pass" NRM);
+				ComSc += 2;
+			}
+			else {
+				printf(RED "Fail" NRM);
+				fEx = false;
+			}
+			
+			printf(" % 20d % 10d", dacoff[c], dcref);
+			if(abs(dcreact[c]-reacref) > reacvar) {
+				printf(" Bad reaction");
+				if(--Nfail) printf(" -");
+			}
+			if(abs(dacoff[c]-dcref) > dcvar) printf(" Bad level");
+			printf("\n");
 		}
 		
-		printf(" % 20d % 10.0f Var = %5.1lf ", bl[c], ref, blvar[c]);
-		if(blvar[c]>=blvtol[c%6]) {
-			printf(" Unstable");
-			if(--Nfail) printf(" -");
+		//Baseline offsets
+		printf(BLD "\nBaseline offsets (in ADC units):\n" NRM);
+		ComSc -= 2; ExtSc += 16;
+		for(c=0;c<12;c++) {
+			if(adcmask&(1<<ch2c[c]) && is_charge[c%6]) {
+				ComSc += 1;
+				continue; //Skip line if ADC is broken
+			}
+			if(fFailOff[ch2c[c]] && is_charge[c%6]) {
+				ComSc += 1;
+				continue; //Skip line if a failure on DC level was already shown
+			}
+			
+			printf("               %s-%s ", lADC[c%6], lFPGA[c/6]);
+			ref = v4 ? blref5[c%6] : blref3[c%6];
+			Nfail=0;
+			if(fabs(ref-(double)(bl[c])) >= bltoll[c%6]) {
+				failmask |= FAIL_OFFSET;
+				fRegDC = true;
+				Nfail++;
+			}
+			else ExtSc += 1 - fabs(ref-(double)(bl[c])) / bltoll[c%6];
+			
+			if(blvar[c] >= blvtol[c%6]) {
+				failmask |= FAIL_OFFSET;
+				Nfail++;
+			}
+			else ExtSc += 1 - blvar[c] / blvtol[c%6];
+			
+			if(Nfail) {
+				printf(RED "Fail" NRM);
+				fEx = false;
+			}
+			else {
+				printf(GRN "Pass" NRM);
+				ComSc += 1;
+			}
+			
+			printf(" % 20d % 10.0f Var = %5.1lf ", bl[c], ref, blvar[c]);
+			if(blvar[c]>=blvtol[c%6]) {
+				printf(" Unstable");
+				if(--Nfail) printf(" -");
+			}
+			if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) {
+				printf(" Bad level");
+				if(--Nfail) printf(" -");
+			}
+			printf("\n");
 		}
-		if(fabs(ref-(double)(bl[c]))>=bltoll[c%6]) {
-			printf(" Bad level");
-			if(--Nfail) printf(" -");
-		}
-		printf("\n");
 	}
 	
 	//HV calibration

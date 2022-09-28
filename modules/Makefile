@@ -13,3 +13,4 @@ FzEventSet.pb.cpp: FzEventSet.proto
 
 FzMeterDict.cxx: FzMeter.h FzMeterLinkDef.h
 	rootcling -f FzMeterDict.cxx -c FzMeter.h FzMeterLinkDef.h
+	cp -p FzMeterDict_rdict.pcm ../

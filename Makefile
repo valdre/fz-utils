@@ -22,4 +22,4 @@ fz-test: main/fz-test.cpp modules/FzSC.o modules/FzTestCore.o modules/FzTestUI.o
 	g++ -Wall -Wextra $^ -Imodules -o $@
 
 clean:
-	rm -f fz-* modules/*.pb.* modules/*.o modules/*Dict.* *.d *.pcm modules/*.pcm AutoDict*
+	rm -f fz-* *.pcm modules/*.pb.* modules/*.o modules/*Dict.* *.d *.pcm modules/*.pcm AutoDict*
